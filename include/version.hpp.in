@@ -1,0 +1,5 @@
+#pragma once
+#define DHCP6_EXPORTER_VERSION       "@nxos_dhcp6_exporter_VERSION@"
+#define DHCP6_EXPORTER_VERSION_MAJOR @nxos_dhcp6_exporter_VERSION_MAJOR@
+#define DHCP6_EXPORTER_VERSION_MINOR @nxos_dhcp6_exporter_VERSION_MINOR@
+#define DHCP6_EXPORTER_VERSION_PATCH @nxos_dhcp6_exporter_VERSION_PATCH@

@@ -1,0 +1,1 @@
+Checks: cppcoreguidelines-*, cppcoreguidelines-pro-bounds-array-to-pointer-decay, hicpp-*, modernize-*, -modernize-use-trailing-return-type, perfomance-*, clang-analyzer-*, portability-*

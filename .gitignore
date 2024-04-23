@@ -1,0 +1,9 @@
+build/
+.*
+!.gitignore
+!.gitattributes
+
+!.clang-format
+!.clang-tidy
+
+compile_commands.json
