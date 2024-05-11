@@ -1,25 +1,262 @@
-#include "common.hpp"
+#include "dhcp6_exporter_impl.hpp"
+#include "log.hpp"
+#include "version.hpp"
+#include <dhcpsrv/cfgmgr.h>
 
-using isc::hooks::CalloutHandle;
+using isc::dhcp::NetworkStatePtr;
+using isc::hooks::NoSuchArgument;
+
+using isc::dhcp::CfgMgr;
+using isc::hooks::LibraryHandle;
+
+namespace {
+    DHCP6ExporterImplPtr impl;
+}
 
 extern "C" {
-EXPORTED int pkt6_receive(CalloutHandle& handle) {}
+EXPORTED int version() { return KEA_HOOKS_VERSION; }
 
-EXPORTED int pk6_send(CalloutHandle& handle) {}
+EXPORTED int multi_threading_compatible() { return 1; }
 
-EXPORTED int subnet6_select(CalloutHandle& handle) {}
+EXPORTED int load(LibraryHandle& handle) {
+    // TODO: handle config options
+    // ...
 
-EXPORTED int lease6_select(CalloutHandle& handle) {}
+    try {
+        uint16_t family = CfgMgr::instance().getFamily();
+        if (family != AF_INET6) {
+            isc_throw(isc::Unexpected, "Exporter works only in DHCPv6 server");
+        }
 
-EXPORTED int lease6_renew(CalloutHandle& handle) {}
+        impl = std::make_shared<DHCP6ExporterImpl>();
+        // TODO: extract config options and pass to implementation
+        // impl->configure();
 
-EXPORTED int lease6_rebind(CalloutHandle& handle) {}
+        // TODO: register command callouts for commands
+    } catch (const std::exception& ex) {
+        LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_INIT_FAILED).arg(ex.what());
+        return 1;
+    }
 
-EXPORTED int lease6_decline(CalloutHandle& handle) {}
+    LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_LOAD)
+        .arg("nxos_dhcp6_exporter")
+        .arg(DHCP6_EXPORTER_VERSION);
+    return 0;
+}
 
-EXPORTED int lease6_release(CalloutHandle& handle) {}
+EXPORTED int unload() {
+    impl.reset();
+    LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_UNLOAD).arg("nxos_dhcp6_exporter");
+    return 0;
+}
+}
+extern "C" {
+EXPORTED int dhcp6_srv_configured(CalloutHandle& handle) {
+    try {
+        IOServicePtr io_service;
+        handle.getArgument("io_context", io_service);
+        // `io_service` should not be nullptr, stop dhcp6 server
+        if (!io_service) {
+            string error{"Error: io_context is nullptr"};
+            handle.setStatus(CalloutHandle::NEXT_STEP_DROP);
+            handle.setArgument("error", error);
+            LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_INIT_FAILED).arg(error);
+            return 1;
+        }
 
-EXPORTED int lease6_expire(CalloutHandle& handle) {}
+        NetworkStatePtr network_state;
+        handle.getArgument("network_state", network_state);
+        // TODO: are we really need to use `network_state` ?
 
-EXPORTED int lease6_recover(CalloutHandle& handle) {}
+        impl->startService(io_service);
+    } catch (std::exception& ex) {
+        std::abort();
+        LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_INIT_FAILED).arg(ex.what());
+        return 1;
+    }
+
+    return 0;
+}
+
+EXPORTED int pkt6_receive(CalloutHandle& handle) {
+    Pkt6Ptr query;
+    try {
+        handle.getArgument("query6", query);
+
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_PKT6_RECEIVE)
+            .arg(query->toText());
+    } catch (const std::exception& ex) {
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                  DHCP6_EXPORTER_PKT6_RECEIVE_FAILED);
+    }
+
+    return 0;
+}
+
+EXPORTED int pkt6_send(CalloutHandle& handle) {
+    Pkt6Ptr query;
+    Pkt6Ptr response;
+
+    try {
+        handle.getArgument("query6", query);
+        handle.getArgument("response6", response);
+
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_PKT6_SEND)
+            .arg(query->toText())
+            .arg(response->toText());
+    } catch (const std::exception& ex) {
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                  DHCP6_EXPORTER_PKT6_SEND_FAILED)
+            .arg(ex.what());
+    }
+
+    return 0;
+}
+
+EXPORTED int subnet6_select(CalloutHandle& handle) {
+    Pkt6Ptr                       query;
+    Subnet6Ptr                    subnet;
+    isc::dhcp::Subnet6Collection* subnetCollection{nullptr};
+
+    try {
+        handle.getArgument("query6", query);
+        handle.getArgument("subnet6", subnet);
+
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_SUBNET6_SELECT)
+            .arg(query->toText())
+            .arg(subnet->toText());
+    } catch (const std::exception& ex) {
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                  DHCP6_EXPORTER_SUBNET6_SELECT_FAILED)
+            .arg(ex.what());
+    }
+
+    return 0;
+}
+
+EXPORTED int lease6_select(CalloutHandle& handle) {
+    try {
+        impl->handleLease6Select(handle);
+    } catch (const std::exception& ex) {
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                  DHCP6_EXPORTER_LEASE6_SELECT_FAILED)
+            .arg(ex.what());
+    }
+    return 0;
+}
+
+EXPORTED int lease6_renew(CalloutHandle& handle) {
+    Pkt6Ptr      query;
+    Lease6Ptr    lease;
+    Option6IAPtr ia_na, ia_pd;
+    bool         isIA_NA = true, isIA_PD = true;
+
+    try {
+        handle.getArgument("query6", query);
+        handle.getArgument("lease6", lease);
+
+        try {
+            handle.getArgument("ia_na", ia_na);
+        } catch (const NoSuchArgument&) { isIA_NA = false; }
+
+        try {
+            handle.getArgument("ia_pd", ia_pd);
+        } catch (const NoSuchArgument&) { isIA_PD = false; }
+
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_RENEW)
+            .arg(query->toText())
+            .arg(lease->toText())
+            .arg(isIA_NA ? ia_na->toText() : "(null)")
+            .arg(isIA_PD ? ia_pd->toText() : "(null)");
+    } catch (const std::exception& ex) {
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                  DHCP6_EXPORTER_LEASE6_RENEW_FAILED)
+            .arg(ex.what());
+    }
+
+    return 0;
+}
+
+EXPORTED int lease6_rebind(CalloutHandle& handle) {
+    Pkt6Ptr      query;
+    Lease6Ptr    lease;
+    Option6IAPtr ia_na, ia_pd;
+    bool         isIA_NA = true;
+
+    try {
+        handle.getArgument("query6", query);
+        handle.getArgument("lease6", lease);
+
+        try {
+            handle.getArgument("ia_na", ia_na);
+        } catch (const NoSuchArgument&) { isIA_NA = false; }
+
+        try {
+            handle.getArgument("ia_pd", ia_pd);
+        } catch (const NoSuchArgument&) {}
+
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_REBIND)
+            .arg(query->toText())
+            .arg(lease->toText())
+            .arg(isIA_NA ? ia_na->toText() : "(null)")
+            .arg(!isIA_NA ? ia_pd->toText() : "(null)");
+    } catch (const std::exception& ex) {
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                  DHCP6_EXPORTER_LEASE6_REBIND_FAILED)
+            .arg(ex.what());
+    }
+    return 0;
+}
+
+EXPORTED int lease6_decline(CalloutHandle& handle) {
+    Pkt6Ptr   query;
+    Lease6Ptr lease;
+
+    try {
+        handle.getArgument("query6", query);
+        handle.getArgument("lease6", lease);
+
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_DECLINE)
+            .arg(query->toText())
+            .arg(lease->toText());
+    } catch (const std::exception& ex) {
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                  DHCP6_EXPORTER_LEASE6_DECLINE_FAILED)
+            .arg(ex.what());
+    }
+    return 0;
+}
+
+EXPORTED int lease6_release(CalloutHandle& handle) {
+    Pkt6Ptr   query;
+    Lease6Ptr lease;
+    /*
+            handle.getArgument("query6", query);
+            handle.getArgument("lease6", lease);
+
+            LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+       DHCP6_EXPORTER_LEASE6_RELEASE) .arg(query->toText()) .arg(lease->toText());
+                */
+    try {
+    } catch (const std::exception& ex) {
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                  DHCP6_EXPORTER_LEASE6_RELEASE_FAILED)
+            .arg(ex.what());
+    }
+
+    return 0;
+}
+
+EXPORTED int lease6_expire(CalloutHandle& handle) {
+    try {
+        impl->handleLease6Expire(handle);
+    } catch (const std::exception& ex) {
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                  DHCP6_EXPORTER_LEASE6_EXPIRE_FAILED)
+            .arg(ex.what());
+    }
+    return 0;
+}
+
+EXPORTED int lease6_recover(CalloutHandle& handle) { return 0; }
 }

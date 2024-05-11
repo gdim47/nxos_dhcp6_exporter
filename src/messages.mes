@@ -1,3 +1,46 @@
-% DHCP6_EXPORTER_LOAD Starting %1 version %2
+% DHCP6_EXPORTER_LOAD Loading %1 version %2
 
-% DHCP6_EXPORTER_UNLOAD Stopping %1
+% DHCP6_EXPORTER_START_SERVICE Hook %1 started
+
+% DHCP6_EXPORTER_STOP_SERVICE Hook %1 shutdown
+
+% DHCP6_EXPORTER_UNLOAD Stopping hook %1
+
+% DHCP6_EXPORTER_INIT_FAILED Failed to init NX-OS DHCPv6 Exporter hooks library: %1
+
+% DHCP6_EXPORTER_CONFIGURATION_FAILED Failed to configure NX-OS DHCPv6 Exporter hooks library: %1
+
+% DHCP6_EXPORTER_LEASE6_RECEIVE lease6_receive: query6: %1, subnet6: %2, lease6: %3, fake_allocation: %4
+% DHCP6_EXPORTER_LEASE6_RECEIVE_FAILED lease6_receive failed: reason: %1
+
+% DHCP6_EXPORTER_PKT6_RECEIVE pkt6_receive: query6: %1
+% DHCP6_EXPORTER_PKT6_RECEIVE_FAILED pkt6_receive failed: reason: %1
+
+% DHCP6_EXPORTER_PKT6_SEND pkt6_send: query6: %1, response6: %2
+% DHCP6_EXPORTER_PKT6_SEND_FAILED pkt6_send failed: reason: %1
+
+% DHCP6_EXPORTER_SUBNET6_SELECT subnet6_select: query6: %1, subnet6: %2
+% DHCP6_EXPORTER_SUBNET6_SELECT_FAILED subnet6_select failed: reason: %1 
+
+% DHCP6_EXPORTER_LEASE6_RENEW lease6_renew: query6: %1, lease6: %2, ia_na: %3, ia_pd: %4
+% DHCP6_EXPORTER_LEASE6_RENEW_FAILED lease6_renew failed: reason: %1
+
+% DHCP6_EXPORTER_LEASE6_SELECT lease6_select: query6: %1, subnet6: %2, lease6: %3, fake_allocation: %4
+% DHCP6_EXPORTER_LEASE6_SELECT_FAILED lease6_select failed: reason: %1
+% DHCP6_EXPORTER_LEASE6_SELECT_INSERT lease6_select: insert lease for tid: %1, ia_na option: {%2}, ia_pd option: {%3}
+% DHCP6_EXPORTER_LEASE6_SELECT_ALLOCATION_INFO lease6_select allocation info: route_export: %1
+
+% DHCP6_EXPORTER_LEASE6_DECLINE lease6_decline: query6: %1, lease6: %2 
+% DHCP6_EXPORTER_LEASE6_DECLINE_FAILED lease6_decline failed: reason: %1 
+
+% DHCP6_EXPORTER_LEASE6_REBIND lease6_rebind: query6: %1, lease6: %2, ia_na: %3, ia_pd: %4
+% DHCP6_EXPORTER_LEASE6_REBIND_FAILED lease6_rebind failed: reason: %1
+
+% DHCP6_EXPORTER_LEASE6_EXPIRE lease6_expire: lease6: %1, remove_lease: %2 
+% DHCP6_EXPORTER_LEASE6_EXPIRE_FAILED lease6_expire failed: reason: %1
+
+% DHCP6_EXPORTER_LEASE6_RELEASE lease6_release: query6: %1, lease6: %2
+% DHCP6_EXPORTER_LEASE6_RELEASE_FAILED lease6_release failed: reason: %1
+
+% DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE Send update routes on switch according to new lease: tid: {%1}, iaid: {%2}
+% DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE_ROUTE_EXPORT_DATA Update info on switch: switch_addr: {%1}, route_export: {%2} 

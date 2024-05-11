@@ -34,9 +34,11 @@ set_target_properties(nxos_dhcp6_exporter PROPERTIES
 )
 
 target_sources(nxos_dhcp6_exporter PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/loader.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/callout.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/log.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/route_export.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/dhcp6_exporter_impl.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/dhcp6_exporter_service.cpp"
     # logger messages
     "${CMAKE_CURRENT_BINARY_DIR}/messages.cc"
 )
