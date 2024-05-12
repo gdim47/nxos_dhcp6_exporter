@@ -1,7 +1,7 @@
 #pragma once
 #include "log.hpp"
 #include <asiolink/io_service.h>
-#include <cstdint>
+#include <config.h>
 #include <dhcp/dhcp6.h>
 #include <dhcp/option6_ia.h>
 #include <dhcp/option6_iaaddr.h>
@@ -30,8 +30,7 @@
 
 using boost::dynamic_pointer_cast;
 
-using isc::hooks::CalloutHandle;
-
+using isc::data::ConstElementPtr;
 using isc::dhcp::Lease6Ptr;
 using isc::dhcp::Option6IA;
 using isc::dhcp::Option6IAAddr;
@@ -42,7 +41,15 @@ using isc::dhcp::Option6IAPtr;
 using isc::dhcp::Pkt6Ptr;
 using isc::dhcp::Subnet6Ptr;
 
+using isc::hooks::CalloutHandle;
+using isc::hooks::LibraryHandle;
+
 using isc::asiolink::IOAddress;
 using isc::asiolink::IOServicePtr;
 
 using std::string;
+
+namespace isc::http {
+    class HttpClient;
+    using HttpClientPtr = boost::shared_ptr<HttpClient>;
+}    // namespace isc::http

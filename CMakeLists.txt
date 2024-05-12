@@ -9,10 +9,13 @@ project(nxos_dhcp6_exporter
 )
 
 find_package(Kea REQUIRED COMPONENTS
-    #dhcpsrv
-    #dhcp++
+    dhcpsrv
+    dhcp++
     hooks
     log
+    http
+    asiolink
+    cryptolink
     #exceptions
 )
 
@@ -39,6 +42,9 @@ target_sources(nxos_dhcp6_exporter PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/route_export.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/dhcp6_exporter_impl.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/dhcp6_exporter_service.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/management_client.cpp"
+    # management clients
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/nxos_management_client.cpp"
     # logger messages
     "${CMAKE_CURRENT_BINARY_DIR}/messages.cc"
 )
