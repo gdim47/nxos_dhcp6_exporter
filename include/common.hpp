@@ -45,6 +45,7 @@ using isc::hooks::CalloutHandle;
 using isc::hooks::LibraryHandle;
 
 using isc::asiolink::IOAddress;
+using isc::asiolink::IOService;
 using isc::asiolink::IOServicePtr;
 
 using std::string;

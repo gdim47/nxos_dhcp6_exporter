@@ -1,5 +1,4 @@
 #pragma once
-#include "common.hpp"
 #include "messages.h"
 #include <log/logger.h>
 #include <log/macros.h>

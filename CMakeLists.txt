@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.12)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 
@@ -16,8 +16,25 @@ find_package(Kea REQUIRED COMPONENTS
     http
     asiolink
     cryptolink
+    cc
     #exceptions
 )
+
+include(FetchContent)
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY "https://github.com/nlohmann/json"
+    GIT_TAG "v3.11.3"
+
+)
+FetchContent_MakeAvailable(json)
+
+FetchContent_Declare(
+    httplib
+    GIT_REPOSITORY "https://github.com/yhirose/cpp-httplib"
+    GIT_TAG "v0.15.3"
+)
+FetchContent_MakeAvailable(httplib)
 
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/messages.cc" "${CMAKE_CURRENT_BINARY_DIR}/messages.h"
@@ -45,6 +62,9 @@ target_sources(nxos_dhcp6_exporter PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/management_client.cpp"
     # management clients
     "${CMAKE_CURRENT_SOURCE_DIR}/src/nxos_management_client.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/nxos_http_client.cpp"
+    # json-rpc support
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/jsonrpc/utils.cpp"
     # logger messages
     "${CMAKE_CURRENT_BINARY_DIR}/messages.cc"
 )
@@ -57,4 +77,6 @@ target_include_directories(nxos_dhcp6_exporter PRIVATE
 
 target_link_libraries(nxos_dhcp6_exporter PRIVATE
     ${Kea_LIBRARIES}
+    nlohmann_json::nlohmann_json
+    httplib::httplib
 )
