@@ -14,14 +14,13 @@ class ManagementClient {
     static ManagementClientPtr init(const string&   mgmtName,
                                     ConstElementPtr mgmtConnParams);
 
-    virtual void startClient(const IOServicePtr& io_service) = 0;
+    virtual void startClient(IOService& io_service) = 0;
+
+    virtual void stopClient() = 0;
 
     virtual void sendRoutesToSwitch(const RouteExport& route) = 0;
 
-    void setIOService(const IOServicePtr& io_service);
-
-  protected:
-    IOServicePtr m_ioService;
+    virtual string connectionName() const = 0;
 
   protected:
     ManagementClient() = default;

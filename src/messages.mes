@@ -44,3 +44,21 @@
 
 % DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE Send update routes on switch according to new lease: tid: {%1}, iaid: {%2}
 % DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE_ROUTE_EXPORT_DATA Update info on switch: switch_addr: {%1}, route_export: {%2} 
+
+% DHCP6_EXPORTER_UPDATE_INFO_COMMUNICATION_FAILED Failed to update routes on switch{%1}: %2
+
+% DHCP6_EXPORTER_JSON_RPC_VALIDATE_ERROR Failed to validate JSON-RPC response from switch{%1}: %2
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_PARSE_ERROR Failed to parse response from NX-OS switch{%1} to %2: %3
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_TRACE_DATA Received %1 response data for switch{%2}: %3
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_ERROR Failed to map vlan interface address to vlan id for switch{%1}: %2
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_TRACE_DATA Received mapping from vlan addr to vlan id for switch{%1}: vlan_addr: {%2}, vlan_id: {%3}
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_TRACE_DATA Handle route applying for switch{%1}: src: {%2}, dst: {%3}
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED Failed to apply route for switch{%1}: src: {%2}, dst: {%3}
+
+% DHCP6_EXPORTER_LOG_RESPONSE Switch response raw: %1
