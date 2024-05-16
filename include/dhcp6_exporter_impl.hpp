@@ -8,11 +8,11 @@ using std::make_shared;
 
 class DHCP6ExporterImpl {
   public:
-    DHCP6ExporterImpl() = default;
+    DHCP6ExporterImpl()                                    = default;
     DHCP6ExporterImpl(const DHCP6ExporterImpl&)            = delete;
     DHCP6ExporterImpl& operator=(const DHCP6ExporterImpl&) = delete;
 
-    void configure(const isc::data::ConstElementPtr& config);
+    bool configureAndInitClient(LibraryHandle& handle);
 
     void startService(const IOServicePtr& io_service);
 

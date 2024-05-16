@@ -7,9 +7,11 @@ string RouteExport::toString() const {
             using T = std::decay_t<decltype(info)>;
 
             if constexpr (std::is_same_v<T, IA_NAInfo>) {
-                return "ia_naAddr=" + info.ia_naAddr.toText();
+                return "srcVlanAddr=" + info.srcVlanAddr.toText() +
+                       ", ia_naAddr=" + info.ia_naAddr.toText();
             } else if constexpr (std::is_same_v<T, IA_PDInfo>) {
-                return "ia_pdPrefix=" + info.ia_pdPrefix.toText() + ", " +
+                return "dstIa_naAddr=" + info.dstIa_naAddr.toText() +
+                       ", ia_pdPrefix=" + info.ia_pdPrefix.toText() + ", " +
                        "ia_pdLength=" + std::to_string(info.ia_pdLength);
             }
         },

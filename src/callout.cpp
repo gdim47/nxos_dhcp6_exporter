@@ -7,7 +7,6 @@ using isc::dhcp::NetworkStatePtr;
 using isc::hooks::NoSuchArgument;
 
 using isc::dhcp::CfgMgr;
-using isc::hooks::LibraryHandle;
 
 namespace {
     DHCP6ExporterImplPtr impl;
@@ -19,9 +18,6 @@ EXPORTED int version() { return KEA_HOOKS_VERSION; }
 EXPORTED int multi_threading_compatible() { return 1; }
 
 EXPORTED int load(LibraryHandle& handle) {
-    // TODO: handle config options
-    // ...
-
     try {
         uint16_t family = CfgMgr::instance().getFamily();
         if (family != AF_INET6) {
@@ -30,7 +26,7 @@ EXPORTED int load(LibraryHandle& handle) {
 
         impl = std::make_shared<DHCP6ExporterImpl>();
         // TODO: extract config options and pass to implementation
-        // impl->configure();
+        impl->configureAndInitClient(handle);
 
         // TODO: register command callouts for commands
     } catch (const std::exception& ex) {

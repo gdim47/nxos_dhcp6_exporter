@@ -1,14 +1,39 @@
 #include "dhcp6_exporter_impl.hpp"
 #include <cassert>
 
-void DHCP6ExporterImpl::startService(const IOServicePtr& io_service) {
-    m_service = std::make_shared<DHCP6ExporterService>(io_service);
+bool DHCP6ExporterImpl::configureAndInitClient(LibraryHandle& handle) {
+    ConstElementPtr mgmtConnType{handle.getParameter("connection-type")};
+    if (!mgmtConnType) {
+        isc_throw(isc::BadValue, "No parameter \"connection-type\" in config");
+    }
+    if (mgmtConnType->getType() != isc::data::Element::string) {
+        isc_throw(isc::BadValue, "parameter \"connection-type\" must be a string");
+    }
+    ConstElementPtr mgmtConnParams{handle.getParameter("connection-params")};
+    if (!mgmtConnParams) {
+        isc_throw(isc::BadValue, "No parameter \"connection-params\" in config");
+    }
+    if (mgmtConnParams->getType() != isc::data::Element::map) {
+        isc_throw(isc::BadValue, "parameter \"connection-params\" must be a map");
+    }
+    m_service = boost::make_shared<DHCP6ExporterService>(mgmtConnType, mgmtConnParams);
 
-    LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_START_SERVICE)
-        .arg("nxos_dhcp6_exporter");
+    return false;
 }
 
-void DHCP6ExporterImpl::stopService() { m_service.reset(); }
+void DHCP6ExporterImpl::startService(const IOServicePtr& io_service) {
+    if (m_service) {
+        m_service->setIOService(io_service);
+        m_service->startService();
+        LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_START_SERVICE)
+            .arg("nxos_dhcp6_exporter");
+    }
+}
+
+void DHCP6ExporterImpl::stopService() {
+    m_service->stopService();
+    m_service.reset();
+}
 
 // kea call this hook once per lease selection.
 // So, we have 2 call function: for IA_NA and IA_PD and etc
@@ -44,9 +69,10 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
         Option6IAPtr queryIA_NAOption{
             dynamic_pointer_cast<Option6IA>(queryIA_NAOptionRaw)};
         uint32_t iaid{queryIA_NAOption->getIAID()};
-        auto     iaPrefixRaw{queryIA_NAOption->getOption(D6O_IAADDR)};
-        assert(iaPrefixRaw != nullptr && "IA_NAAddrRaw relay option is absent");
-        Option6IAAddrPtr IA_NAOption{dynamic_pointer_cast<Option6IAAddr>(iaPrefixRaw)};
+        auto     queryIAAddrRaw{queryIA_NAOption->getOption(D6O_IAADDR)};
+        assert(queryIAAddrRaw != nullptr && "IA_NAAddrRaw relay option is absent");
+        Option6IAAddrPtr queryIAAddrOption{
+            dynamic_pointer_cast<Option6IAAddr>(queryIAAddrRaw)};
 
         auto     leaseAddr{lease->addr_};
         auto     leasePrefixLength{lease->prefixlen_};
@@ -63,8 +89,9 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
             // extract info about options from lease
             switch (leaseType) {
                 case isc::dhcp::Lease::TYPE_NA: {
-                    RouteExport routeInfo{transactionId, leaseIAID,
-                                          IA_NAInfo{std::move(leaseAddr)}};
+                    RouteExport routeInfo{
+                        transactionId, leaseIAID,
+                        IA_NAInfo{std::move(relayAddr), std::move(leaseAddr)}};
 
                     LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
                               DHCP6_EXPORTER_LEASE6_SELECT_ALLOCATION_INFO)
@@ -73,9 +100,10 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
                     m_service->exportRoute(routeInfo);
                 } break;
                 case isc::dhcp::Lease::TYPE_PD: {
-                    RouteExport routeInfo{
-                        transactionId, leaseIAID,
-                        IA_PDInfo{std::move(leaseAddr), leasePrefixLength}};
+                    RouteExport routeInfo{transactionId, leaseIAID,
+                                          IA_PDInfo{queryIAAddrOption->getAddress(),
+                                                    std::move(leaseAddr),
+                                                    leasePrefixLength}};
 
                     LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
                               DHCP6_EXPORTER_LEASE6_SELECT_ALLOCATION_INFO)
