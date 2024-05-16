@@ -1,5 +1,4 @@
 #include "dhcp6_exporter_impl.hpp"
-#include <cassert>
 
 bool DHCP6ExporterImpl::configureAndInitClient(LibraryHandle& handle) {
     ConstElementPtr mgmtConnType{handle.getParameter("connection-type")};
@@ -59,20 +58,26 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
     if (fake_allocation == false) {
         auto relayAddr{query->getRelay6LinkAddress(0)};
         auto transactionId{query->getTransid()};
-        auto queryIA_PDOptionRaw{query->getOption(D6O_IA_PD)};
-        assert(queryIA_PDOptionRaw != nullptr && "iaPDOptionRaw relay option is absent");
-        Option6IAPtr queryIA_PDOption{
-            dynamic_pointer_cast<Option6IA>(queryIA_PDOptionRaw)};
 
-        auto queryIA_NAOptionRaw{query->getOption(D6O_IA_NA)};
-        assert(queryIA_NAOptionRaw != nullptr && "iaNAOptionRaw relay option is absent");
-        Option6IAPtr queryIA_NAOption{
-            dynamic_pointer_cast<Option6IA>(queryIA_NAOptionRaw)};
-        uint32_t iaid{queryIA_NAOption->getIAID()};
-        auto     queryIAAddrRaw{queryIA_NAOption->getOption(D6O_IAADDR)};
-        assert(queryIAAddrRaw != nullptr && "IA_NAAddrRaw relay option is absent");
-        Option6IAAddrPtr queryIAAddrOption{
-            dynamic_pointer_cast<Option6IAAddr>(queryIAAddrRaw)};
+        Option6IAPtr queryIA_PDOption;
+        {
+            auto queryIA_PDOptionRaw{query->getOption(D6O_IA_PD)};
+            if (queryIA_PDOptionRaw) {
+                queryIA_PDOption = dynamic_pointer_cast<Option6IA>(queryIA_PDOptionRaw);
+            }
+        }
+        Option6IAPtr queryIA_NAOption;
+        {
+            auto queryIA_NAOptionRaw{query->getOption(D6O_IA_NA)};
+            if (queryIA_NAOptionRaw) {
+                queryIA_NAOption = dynamic_pointer_cast<Option6IA>(queryIA_NAOptionRaw);
+            }
+        }
+        Option6IAAddrPtr queryIAAddrOption;
+        if (queryIA_NAOption) {
+            auto queryIAAddrRaw{queryIA_NAOption->getOption(D6O_IAADDR)};
+            queryIAAddrOption = dynamic_pointer_cast<Option6IAAddr>(queryIAAddrRaw);
+        }
 
         auto     leaseAddr{lease->addr_};
         auto     leasePrefixLength{lease->prefixlen_};
@@ -109,7 +114,7 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
                               DHCP6_EXPORTER_LEASE6_SELECT_ALLOCATION_INFO)
                         .arg(routeInfo.toString());
 
-                    // send router export to the switch
+                    // send route export to the switch
                     m_service->exportRoute(routeInfo);
                 } break;
                 case isc::dhcp::Lease::TYPE_TA:
