@@ -4,7 +4,6 @@
 #include <dhcpsrv/cfgmgr.h>
 
 using isc::dhcp::NetworkStatePtr;
-using isc::hooks::NoSuchArgument;
 
 using isc::dhcp::CfgMgr;
 
@@ -127,7 +126,6 @@ EXPORTED int subnet6_select(CalloutHandle& handle) {
                   DHCP6_EXPORTER_SUBNET6_SELECT_FAILED)
             .arg(ex.what());
     }
-
     return 0;
 }
 
@@ -143,60 +141,19 @@ EXPORTED int lease6_select(CalloutHandle& handle) {
 }
 
 EXPORTED int lease6_renew(CalloutHandle& handle) {
-    Pkt6Ptr      query;
-    Lease6Ptr    lease;
-    Option6IAPtr ia_na, ia_pd;
-    bool         isIA_NA = true, isIA_PD = true;
-
     try {
-        handle.getArgument("query6", query);
-        handle.getArgument("lease6", lease);
-
-        try {
-            handle.getArgument("ia_na", ia_na);
-        } catch (const NoSuchArgument&) { isIA_NA = false; }
-
-        try {
-            handle.getArgument("ia_pd", ia_pd);
-        } catch (const NoSuchArgument&) { isIA_PD = false; }
-
-        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_RENEW)
-            .arg(query ? query->toText() : "(null)")
-            .arg(lease ? lease->toText() : "(null)")
-            .arg(isIA_NA ? ia_na->toText() : "(null)")
-            .arg(isIA_PD ? ia_pd->toText() : "(null)");
+        impl->handleLease6Renew(handle);
     } catch (const std::exception& ex) {
         LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
                   DHCP6_EXPORTER_LEASE6_RENEW_FAILED)
             .arg(ex.what());
     }
-
     return 0;
 }
 
 EXPORTED int lease6_rebind(CalloutHandle& handle) {
-    Pkt6Ptr      query;
-    Lease6Ptr    lease;
-    Option6IAPtr ia_na, ia_pd;
-    bool         isIA_NA = true;
-
     try {
-        handle.getArgument("query6", query);
-        handle.getArgument("lease6", lease);
-
-        try {
-            handle.getArgument("ia_na", ia_na);
-        } catch (const NoSuchArgument&) { isIA_NA = false; }
-
-        try {
-            handle.getArgument("ia_pd", ia_pd);
-        } catch (const NoSuchArgument&) {}
-
-        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_REBIND)
-            .arg(query->toText())
-            .arg(lease->toText())
-            .arg(isIA_NA ? ia_na->toText() : "(null)")
-            .arg(!isIA_NA ? ia_pd->toText() : "(null)");
+        impl->handleLease6Rebind(handle);
     } catch (const std::exception& ex) {
         LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
                   DHCP6_EXPORTER_LEASE6_REBIND_FAILED)
@@ -224,7 +181,6 @@ EXPORTED int lease6_release(CalloutHandle& handle) {
                   DHCP6_EXPORTER_LEASE6_RELEASE_FAILED)
             .arg(ex.what());
     }
-
     return 0;
 }
 

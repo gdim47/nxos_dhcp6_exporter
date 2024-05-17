@@ -26,6 +26,17 @@ class DHCP6ExporterImpl {
 
     void handleLease6Decline(CalloutHandle& handle);
 
+    void handleLease6Rebind(CalloutHandle& handle);
+
+    void handleLease6Renew(CalloutHandle& handle);
+
   private:
     DHCP6ExporterServicePtr m_service;
+
+  private:
+    template<bool IsRebindProcess>
+    void handleRenewRebindProcess(Pkt6Ptr      query,
+                                  Lease6Ptr    lease,
+                                  Option6IAPtr iaOpt,
+                                  bool         isIA_NA);
 };

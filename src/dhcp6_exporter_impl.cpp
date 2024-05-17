@@ -300,3 +300,160 @@ void DHCP6ExporterImpl::handleLease6Decline(CalloutHandle& handle) {
         case isc::dhcp::Lease::TYPE_V4: break;
     }
 }
+
+using isc::hooks::NoSuchArgument;
+
+template<bool IsRebindProcess>
+void DHCP6ExporterImpl::handleRenewRebindProcess(Pkt6Ptr      query,
+                                                 Lease6Ptr    lease,
+                                                 Option6IAPtr iaOpt,
+                                                 bool         isIA_NA) {
+    auto     relayAddr{query->getRelay6LinkAddress(0)};
+    auto     transactionId{query->getTransid()};
+    auto     leaseAddr{lease->addr_};
+    auto     leaseAddrPrefixLength{lease->prefixlen_};
+    uint32_t clientIAID{lease->iaid_};
+    auto     clientDUID{lease->duid_};
+
+    IOAddress queryOriginalAddr("::");
+    uint8_t   queryOriginalPrefixLength{0};
+    if (isIA_NA) {
+        Option6IAPtr queryIA_NAOption{
+            dynamic_pointer_cast<Option6IA>(query->getOption(D6O_IA_NA))};
+        auto queryIAAddrOptionRaw{queryIA_NAOption->getOption(D6O_IAADDR)};
+        if (!queryIAAddrOptionRaw) {
+            isc_throw(isc::Unexpected, "failed to extract IAAddr from IA_NA option");
+        }
+        // get original IA_NA option from client query
+        auto queryIAAddrOption{dynamic_pointer_cast<Option6IAAddr>(queryIAAddrOptionRaw)};
+        queryOriginalAddr         = queryIAAddrOption->getAddress();
+        queryOriginalPrefixLength = 128;
+
+        RouteExport oldRouteInfo{transactionId, clientIAID, clientDUID,
+                                 IA_NAInfo{relayAddr, std::move(queryOriginalAddr)}};
+        RouteExport newRouteInfo{transactionId, clientIAID, clientDUID,
+                                 IA_NAInfo{relayAddr, leaseAddr}};
+        // dhcpv6 change address for client, we need to handle that situation
+        if (queryOriginalAddr != leaseAddr) {
+            m_service->removeRoute(oldRouteInfo);
+            m_service->exportRoute(newRouteInfo);
+        } else if constexpr (IsRebindProcess) {
+            // a client sends a REBIND message to any available DHCPv6 Server is
+            // sent after a DHCPv6 Client receives no response to a RENEW message.
+            // For safety we just re-export new route
+            m_service->exportRoute(newRouteInfo);
+        }
+    } else {
+        Option6IAPtr queryIA_PDOption{
+            dynamic_pointer_cast<Option6IA>(query->getOption(D6O_IA_PD))};
+        auto queryIAPrefixOptionRaw{queryIA_PDOption->getOption(D6O_IAPREFIX)};
+        if (!queryIAPrefixOptionRaw) {
+            isc_throw(isc::Unexpected, "failed to extract IAPREFIX from IA_PD option");
+        }
+        // get original IA_PD option from client query
+        auto queryIAPrefixOption{
+            dynamic_pointer_cast<Option6IAPrefix>(queryIAPrefixOptionRaw)};
+        queryOriginalAddr         = queryIAPrefixOption->getAddress();
+        queryOriginalPrefixLength = queryIAPrefixOption->getLength();
+
+        // check in lease database that we have IA_NA entry for creating IA_PD route
+        Lease6Ptr leaseIA_NA{findIA_NALeaseByDUID_IAID(clientDUID, clientIAID)};
+        if (!leaseIA_NA) {
+            LOG_ERROR(DHCP6ExporterLogger,
+                      DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_FIND_IA_NA_LEASE_FAILED)
+                .arg(clientIAID)
+                .arg(clientDUID->toText());
+            return;
+        }
+
+        RouteExport oldRouteInfo{transactionId, clientIAID, clientDUID,
+                                 IA_PDInfo{relayAddr, std::move(queryOriginalAddr),
+                                           queryOriginalPrefixLength}};
+        RouteExport newRouteInfo{
+            transactionId, clientIAID, clientDUID,
+            IA_PDInfo{leaseIA_NA->addr_, leaseAddr, leaseAddrPrefixLength}};
+
+        // dhcpv6 change address for client, we need to handle that situation
+        if (queryOriginalAddr != leaseAddr) {
+            m_service->removeRoute(oldRouteInfo);
+            m_service->exportRoute(newRouteInfo);
+        } else if constexpr (IsRebindProcess) {
+            // a client sends a REBIND message to any available DHCPv6 Server is
+            // sent after a DHCPv6 Client receives no response to a RENEW message.
+            // For safety we just re-export new route
+            m_service->exportRoute(newRouteInfo);
+        }
+    }
+}
+
+void DHCP6ExporterImpl::handleLease6Rebind(CalloutHandle& handle) {
+    Pkt6Ptr      query;
+    Lease6Ptr    lease;
+    Option6IAPtr ia_opt, tmp;
+    bool         isIA_NA{true}, isIA_PD{true};
+
+    handle.getArgument("query6", query);
+    handle.getArgument("lease6", lease);
+
+    // IA_NA and IA_PD arguments are mutually exclusive
+    try {
+        handle.getArgument("ia_na", tmp);
+        if (!tmp) {
+            isIA_NA = false;
+        } else {
+            ia_opt = tmp;
+        }
+    } catch (const NoSuchArgument&) { isIA_NA = false; }
+
+    try {
+        handle.getArgument("ia_pd", tmp);
+        if (!tmp) {
+            isIA_PD = false;
+        } else {
+            ia_opt = tmp;
+        }
+    } catch (const NoSuchArgument&) { isIA_PD = false; }
+
+    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_REBIND)
+        .arg(query ? query->toText() : "(null)")
+        .arg(lease ? lease->toText() : "(null)")
+        .arg(ia_opt ? ia_opt->toText() : "(null)");
+
+    handleRenewRebindProcess<true>(query, lease, ia_opt, isIA_NA);
+}
+
+void DHCP6ExporterImpl::handleLease6Renew(CalloutHandle& handle) {
+    Pkt6Ptr      query;
+    Lease6Ptr    lease;
+    Option6IAPtr ia_opt, tmp;
+    bool         isIA_NA{true}, isIA_PD{true};
+
+    handle.getArgument("query6", query);
+    handle.getArgument("lease6", lease);
+
+    // IA_NA and IA_PD arguments are mutually exclusive
+    try {
+        handle.getArgument("ia_na", tmp);
+        if (!tmp) {
+            isIA_NA = false;
+        } else {
+            ia_opt = tmp;
+        }
+    } catch (const NoSuchArgument&) { isIA_NA = false; }
+
+    try {
+        handle.getArgument("ia_pd", tmp);
+        if (!tmp) {
+            isIA_PD = false;
+        } else {
+            ia_opt = tmp;
+        }
+    } catch (const NoSuchArgument&) { isIA_PD = false; }
+
+    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_RENEW)
+        .arg(query ? query->toText() : "(null)")
+        .arg(lease ? lease->toText() : "(null)")
+        .arg(ia_opt ? ia_opt->toText() : "(null)");
+
+    handleRenewRebindProcess<false>(query, lease, ia_opt, isIA_NA);
+}
