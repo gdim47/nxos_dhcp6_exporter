@@ -32,6 +32,7 @@
 
 % DHCP6_EXPORTER_LEASE6_DECLINE lease6_decline: query6: %1, lease6: %2 
 % DHCP6_EXPORTER_LEASE6_DECLINE_FAILED lease6_decline failed: reason: %1 
+% DHCP6_EXPORTER_LEASE6_DECLINE_ALLOCATION_INFO lease6_decline allocation info: route_export: {%1}
 
 % DHCP6_EXPORTER_LEASE6_REBIND lease6_rebind: query6: %1, lease6: %2, ia_na: %3, ia_pd: %4
 % DHCP6_EXPORTER_LEASE6_REBIND_FAILED lease6_rebind failed: reason: %1

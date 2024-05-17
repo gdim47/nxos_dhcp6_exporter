@@ -24,6 +24,8 @@ class DHCP6ExporterImpl {
 
     void handleLease6Release(CalloutHandle& handle);
 
+    void handleLease6Decline(CalloutHandle& handle);
+
   private:
     DHCP6ExporterServicePtr m_service;
 };

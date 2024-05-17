@@ -73,7 +73,7 @@ EXPORTED int dhcp6_srv_configured(CalloutHandle& handle) {
 
     return 0;
 }
-
+/*
 EXPORTED int pkt6_receive(CalloutHandle& handle) {
     Pkt6Ptr query;
     try {
@@ -108,6 +108,7 @@ EXPORTED int pkt6_send(CalloutHandle& handle) {
 
     return 0;
 }
+*/
 
 EXPORTED int subnet6_select(CalloutHandle& handle) {
     Pkt6Ptr                       query;
@@ -205,16 +206,8 @@ EXPORTED int lease6_rebind(CalloutHandle& handle) {
 }
 
 EXPORTED int lease6_decline(CalloutHandle& handle) {
-    Pkt6Ptr   query;
-    Lease6Ptr lease;
-
     try {
-        handle.getArgument("query6", query);
-        handle.getArgument("lease6", lease);
-
-        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_DECLINE)
-            .arg(query->toText())
-            .arg(lease->toText());
+        impl->handleLease6Decline(handle);
     } catch (const std::exception& ex) {
         LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
                   DHCP6_EXPORTER_LEASE6_DECLINE_FAILED)

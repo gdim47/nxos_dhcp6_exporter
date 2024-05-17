@@ -247,3 +247,56 @@ void DHCP6ExporterImpl::handleLease6Release(CalloutHandle& handle) {
         case isc::dhcp::Lease::TYPE_V4: break;
     }
 }
+
+void DHCP6ExporterImpl::handleLease6Decline(CalloutHandle& handle) {
+    Pkt6Ptr   query;
+    Lease6Ptr lease;
+
+    handle.getArgument("query6", query);
+    handle.getArgument("lease6", lease);
+    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_DECLINE)
+        .arg(query ? query->toText() : "(null)")
+        .arg(query ? lease->toText() : "(null)");
+
+    auto     relayAddr{query->getRelay6LinkAddress(0)};
+    auto     transactionId{query->getTransid()};
+    auto     leaseAddr{lease->addr_};
+    auto     leasePrefixLength{lease->prefixlen_};
+    auto     leaseType{lease->getType()};
+    uint32_t leaseIAID{lease->iaid_};
+    auto     leaseDUID{lease->duid_};
+
+    switch (leaseType) {
+        case isc::dhcp::Lease::TYPE_NA: {
+            RouteExport routeInfo{transactionId, leaseIAID, leaseDUID,
+                                  IA_NAInfo{std::move(relayAddr), std::move(leaseAddr)}};
+            LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                      DHCP6_EXPORTER_LEASE6_DECLINE_ALLOCATION_INFO)
+                .arg(routeInfo.toString());
+
+            m_service->removeRoute(routeInfo);
+        } break;
+        case isc::dhcp::Lease::TYPE_PD: {
+            // for IA_PD removal we need to know IA_NA addr that leased for client.
+            // If we can't find lease for IA_NA based on IAID + DUID, nothing we can do
+            Lease6Ptr leaseIA_NA{findIA_NALeaseByDUID_IAID(leaseDUID, leaseIAID)};
+            if (!leaseIA_NA) {
+                LOG_ERROR(DHCP6ExporterLogger,
+                          DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_FIND_IA_NA_LEASE_FAILED)
+                    .arg(leaseIAID)
+                    .arg(leaseDUID ? leaseDUID->toText() : "(null)");
+                return;
+            }
+            RouteExport routeInfo{
+                transactionId, leaseIAID, leaseDUID,
+                IA_PDInfo{leaseIA_NA->addr_, std::move(leaseAddr), leasePrefixLength}};
+            LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                      DHCP6_EXPORTER_LEASE6_DECLINE_ALLOCATION_INFO)
+                .arg(routeInfo.toString());
+
+            m_service->removeRoute(routeInfo);
+        }
+        case isc::dhcp::Lease::TYPE_TA:
+        case isc::dhcp::Lease::TYPE_V4: break;
+    }
+}
