@@ -315,7 +315,7 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
                                   "field \"TABLE_path\" does not contain exactly 1 item");
                     }
 
-                    vlanIfName = prefixRow.table_path[0].ifname;
+                    vlanIfName = prefixRow.table_path[0].ifname.front();
 
                     if (vlanIfName.empty()) {
                         isc_throw(isc::BadValue, "vlan interface id is empty");

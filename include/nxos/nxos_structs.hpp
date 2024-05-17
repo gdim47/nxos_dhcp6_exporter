@@ -32,20 +32,45 @@ NLOHMANN_JSON_NAMESPACE_END
 
 namespace NXOSResponse {
     struct RowPath {
-        string ipnexthop;
-        string ifname;
+        std::vector<string> ipnexthop;
+        std::vector<string> ifname;
     };
 
     inline void to_json(json& j, const RowPath& row) {
-        auto inner = json{{"ipnexthop", row.ipnexthop}, {"ifname", row.ifname}};
-        j          = json{{"ROW_path", inner}};
+        json inner;
+        auto ipnexthopSize{row.ipnexthop.size()};
+        auto ifnameSize{row.ifname.size()};
+        if (ifnameSize != ipnexthopSize || ifnameSize == 0) {
+            // silently drop values
+        } else if (ifnameSize == 1) {
+            inner = json{{"ipnexthop", row.ipnexthop[0]}, {"ifname", row.ifname[0]}};
+        } else {
+            std::vector<std::map<string, string>> innerRowPathes;
+            for (size_t i = 0; i < row.ipnexthop.size(); ++i) {
+                std::map<string, string> values{{"ipnexthop", row.ipnexthop[i]},
+                                                {"ifname", row.ifname[i]}};
+                innerRowPathes.push_back(std::move(values));
+            }
+            inner = json{std::move(innerRowPathes)};
+        }
+        j = json{{"ROW_path", inner}};
     }
 
     inline void from_json(const json& j, RowPath& row) {
         json inner;
         j.at("ROW_path").get_to(inner);
-        inner.at("ipnexthop").get_to(row.ipnexthop);
-        inner.at("ifname").get_to(row.ifname);
+        if (inner.is_array()) {
+            for (const auto& path : inner) {
+                row.ifname.push_back(path.at("ifname").get<string>());
+                row.ipnexthop.push_back(path.at("ipnexthop").get<string>());
+            }
+        } else if (inner.is_object()) {
+            row.ipnexthop.resize(1);
+            row.ifname.resize(1);
+
+            inner.at("ipnexthop").get_to(row.ipnexthop[0]);
+            inner.at("ifname").get_to(row.ifname[0]);
+        }
     }
 
     struct RowPrefix {
