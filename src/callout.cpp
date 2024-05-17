@@ -119,8 +119,8 @@ EXPORTED int subnet6_select(CalloutHandle& handle) {
         handle.getArgument("subnet6", subnet);
 
         LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_SUBNET6_SELECT)
-            .arg(query->toText())
-            .arg(subnet->toText());
+            .arg(query ? query->toText() : "(null)")
+            .arg(subnet ? subnet->toText() : "(null)");
     } catch (const std::exception& ex) {
         LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
                   DHCP6_EXPORTER_SUBNET6_SELECT_FAILED)
@@ -160,8 +160,8 @@ EXPORTED int lease6_renew(CalloutHandle& handle) {
         } catch (const NoSuchArgument&) { isIA_PD = false; }
 
         LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_RENEW)
-            .arg(query->toText())
-            .arg(lease->toText())
+            .arg(query ? query->toText() : "(null)")
+            .arg(lease ? lease->toText() : "(null)")
             .arg(isIA_NA ? ia_na->toText() : "(null)")
             .arg(isIA_PD ? ia_pd->toText() : "(null)");
     } catch (const std::exception& ex) {
@@ -224,16 +224,8 @@ EXPORTED int lease6_decline(CalloutHandle& handle) {
 }
 
 EXPORTED int lease6_release(CalloutHandle& handle) {
-    Pkt6Ptr   query;
-    Lease6Ptr lease;
-    /*
-            handle.getArgument("query6", query);
-            handle.getArgument("lease6", lease);
-
-            LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-       DHCP6_EXPORTER_LEASE6_RELEASE) .arg(query->toText()) .arg(lease->toText());
-                */
     try {
+        impl->handleLease6Release(handle);
     } catch (const std::exception& ex) {
         LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
                   DHCP6_EXPORTER_LEASE6_RELEASE_FAILED)

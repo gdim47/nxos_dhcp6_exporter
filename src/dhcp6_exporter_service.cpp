@@ -31,11 +31,22 @@ void DHCP6ExporterService::exportRoute(const RouteExport& route) {
     LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE)
         .arg(route.tid)
         .arg(route.iaid);
-
-    m_client->sendRoutesToSwitch(route);
-
     LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC_DATA,
               DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE_ROUTE_EXPORT_DATA)
         .arg(m_client->connectionName())
         .arg(route.toString());
+
+    m_client->sendRoutesToSwitch(route);
+}
+
+void DHCP6ExporterService::removeRoute(const RouteExport& route) {
+    LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_REMOVE_INFO_ON_DEVICE)
+        .arg(route.tid)
+        .arg(route.iaid);
+    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC_DATA,
+              DHCP6_EXPORTER_REMOVE_INFO_ON_DEVICE_ROUTE_EXPORT_DATA)
+        .arg(m_client->connectionName())
+        .arg(route.toString());
+
+    m_client->removeRoutesFromSwitch(route);
 }

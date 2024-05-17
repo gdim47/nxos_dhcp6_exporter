@@ -71,9 +71,11 @@ class NXOSManagementClient : public ManagementClient {
 
     void sendRoutesToSwitch(const RouteExport& route) override;
 
+    void removeRoutesFromSwitch(const RouteExport& route) override;
+
   private:
     isc::asiolink::IOServicePtr m_ioService;
-    NXOSHttpClientPtr m_httpClient;
+    NXOSHttpClientPtr           m_httpClient;
     // we use cpp-httplib as HTTP client because Kea HttpClient can't handle chunked
     // encoding fron NXOS
     // isc::http::HttpClientPtr     m_httpClient;
@@ -106,6 +108,10 @@ class NXOSManagementClient : public ManagementClient {
     void handleRouteApply(JsonRpcResponsePtr response,
                           const string&      src,
                           const string&      dst);
+
+    void handleRouteRemove(JsonRpcResponsePtr response,
+                           const string&      src,
+                           const string&      dst);
 
     State getState() const noexcept { return m_state; }
     void  setState(State newState);

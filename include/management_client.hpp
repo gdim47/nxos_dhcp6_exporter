@@ -20,6 +20,8 @@ class ManagementClient {
 
     virtual void sendRoutesToSwitch(const RouteExport& route) = 0;
 
+    virtual void removeRoutesFromSwitch(const RouteExport& route) = 0;
+
     virtual string connectionName() const = 0;
 
   protected:

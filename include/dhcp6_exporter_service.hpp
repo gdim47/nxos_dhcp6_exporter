@@ -21,6 +21,8 @@ class DHCP6ExporterService {
 
     void exportRoute(const RouteExport& route);
 
+    void removeRoute(const RouteExport& route);
+
   private:
     IOServicePtr        m_ioService;
     ManagementClientPtr m_client;
