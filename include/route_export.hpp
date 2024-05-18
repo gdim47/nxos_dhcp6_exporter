@@ -14,16 +14,27 @@ struct IA_PDInfo {
     uint8_t   ia_pdLength;
 };
 
+struct IA_NAInfoFuzzyRemove {
+    IOAddress ia_naAddr;
+};
+
+struct IA_PDInfoFuzzyRemove {
+    IOAddress ia_pdPrefix;
+    uint8_t   ia_pdLength;
+};
+
 namespace isc::dhcp {
     class DUID;
     using DuidPtr = boost::shared_ptr<DUID>;
 }    // namespace isc::dhcp
 
 struct RouteExport {
-    uint32_t                           tid;
-    uint32_t                           iaid;
-    isc::dhcp::DuidPtr                 duid;
-    std::variant<IA_NAInfo, IA_PDInfo> routeInfo;
+    uint32_t           tid;
+    uint32_t           iaid;
+    isc::dhcp::DuidPtr duid;
+    std::variant<IA_NAInfo, IA_PDInfo, IA_NAInfoFuzzyRemove, IA_PDInfoFuzzyRemove>
+        routeInfo;
 
     string toString() const;
+    string toDHCPv6IATypeString() const;
 };
