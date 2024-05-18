@@ -32,8 +32,8 @@ NLOHMANN_JSON_NAMESPACE_END
 
 namespace NXOSResponse {
     struct RowPath {
-        std::vector<string> ipnexthop;
-        std::vector<string> ifname;
+        std::vector<std::optional<string>> ipnexthop;
+        std::vector<std::optional<string>> ifname;
     };
 
     inline void to_json(json& j, const RowPath& row) {
@@ -45,10 +45,15 @@ namespace NXOSResponse {
         } else if (ifnameSize == 1) {
             inner = json{{"ipnexthop", row.ipnexthop[0]}, {"ifname", row.ifname[0]}};
         } else {
-            std::vector<std::map<string, string>> innerRowPathes;
+            std::vector<std::map<string, std::optional<string>>> innerRowPathes;
             for (size_t i = 0; i < row.ipnexthop.size(); ++i) {
-                std::map<string, string> values{{"ipnexthop", row.ipnexthop[i]},
-                                                {"ifname", row.ifname[i]}};
+                std::map<string, std::optional<string>> values{};
+                if (row.ifname[i].has_value()) {
+                    values.insert({"ifname", row.ifname[i]});
+                }
+                if (row.ipnexthop[i].has_value()) {
+                    values.insert({"ipnexthop", row.ipnexthop[i]});
+                }
                 innerRowPathes.push_back(std::move(values));
             }
             inner = json{std::move(innerRowPathes)};
@@ -61,15 +66,23 @@ namespace NXOSResponse {
         j.at("ROW_path").get_to(inner);
         if (inner.is_array()) {
             for (const auto& path : inner) {
-                row.ifname.push_back(path.at("ifname").get<string>());
-                row.ipnexthop.push_back(path.at("ipnexthop").get<string>());
+                std::optional<string> tmp;
+                bool                  containsIfname{path.contains("ifname")};
+                if (containsIfname) { tmp = path.at("ifname").get<string>(); }
+                row.ifname.push_back(std::move(tmp));
+                bool containsIpnexthop{path.contains("ipnexthop")};
+                if (containsIpnexthop) { tmp = path.at("ipnexthop").get<string>(); }
+                row.ipnexthop.push_back(std::move(tmp));
             }
         } else if (inner.is_object()) {
             row.ipnexthop.resize(1);
             row.ifname.resize(1);
 
-            inner.at("ipnexthop").get_to(row.ipnexthop[0]);
-            inner.at("ifname").get_to(row.ifname[0]);
+            std::optional<string> ipnexthop;
+            bool                  containsIpnexthop{inner.contains("ipnexthop")};
+            if (containsIpnexthop) { inner.at("ipnexthop").get_to(row.ipnexthop[0]); }
+            bool containsIfname{inner.contains("ifname")};
+            if (containsIfname) { inner.at("ifname").get_to(row.ifname[0]); }
         }
     }
 
