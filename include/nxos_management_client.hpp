@@ -10,23 +10,7 @@
 #include <optional>
 #include <thread>
 
-namespace isc::http {
-    class HttpClient;
-    using HttpClientPtr = boost::shared_ptr<HttpClient>;
-
-    class HttpResponse;
-    using HttpResponsePtr = boost::shared_ptr<HttpResponse>;
-}    // namespace isc::http
-
-namespace isc::asiolink {
-    class TlsContext;
-    using TlsContextPtr = boost::shared_ptr<TlsContext>;
-}    // namespace isc::asiolink
-
 using isc::http::BasicHttpAuth;
-using isc::http::HostHttpHeader;
-using isc::http::HttpClient;
-using isc::http::HttpResponsePtr;
 using isc::http::Url;
 
 class PostHttpRequestJsonRpc;
@@ -52,10 +36,9 @@ struct NXOSConnectionConfigParams {
     std::optional<string> key_file;
 };
 
-using VlanId = uint16_t;
-
-class JsonRpcResponse;
-using JsonRpcResponsePtr = boost::shared_ptr<JsonRpcResponse>;
+namespace NXOSResponse {
+    class RouteLookupResponse;
+}
 
 class NXOSManagementClient : public ManagementClient {
   public:
@@ -82,8 +65,10 @@ class NXOSManagementClient : public ManagementClient {
     // isc::asiolink::TlsContextPtr m_tlsContext;
     NXOSConnectionConfigParams m_params;
 
-    enum State { RUNNING, STOPPED };
-    State m_state{STOPPED};
+  private:
+    NXOSHttpClientPtr m_httpClient;
+    // TODO: implement tls context
+    NXOSConnectionConfigParams m_params;
 
     std::list<boost::shared_ptr<std::thread>> m_threadPool;
     std::mutex                                m_mutexThreadPool;

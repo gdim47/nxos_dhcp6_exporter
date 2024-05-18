@@ -20,6 +20,8 @@ struct TLSInfo {};
 
 using TLSInfoPtr = boost::shared_ptr<TLSInfo>;
 
+// we use cpp-httplib as HTTP client because 
+// Kea HttpClient can't handle chunked encoding from NXOS
 class NXOSHttpClient {
   public:
     using ResponseHandlerCallback = std::function<void(JsonRpcResponsePtr)>;
