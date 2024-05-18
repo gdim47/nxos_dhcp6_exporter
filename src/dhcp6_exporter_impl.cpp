@@ -128,37 +128,6 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
     }
 }
 
-void DHCP6ExporterImpl::handleLease6Expire(CalloutHandle& handle) {
-    /*
-    Lease6Ptr lease;
-    bool      remove_lease;
-
-    handle.getArgument("lease6", lease);
-    handle.getArgument("remove_lease", remove_lease);
-
-    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_EXPIRE)
-        .arg(lease->toText())
-        .arg(remove_lease);
-
-    auto     relayAddr{query->getRelay6LinkAddress(0)};
-    auto     transactionId{query->getTransid()};
-    auto     leaseAddr{lease->addr_};
-    auto     leasePrefixLength{lease->prefixlen_};
-    auto     leaseType{lease->getType()};
-    uint32_t leaseIAID{lease->iaid_};
-    auto     leaseDUID{lease->duid_};
-
-    RouteExport routeInfo{transactionId, leaseIAID, leaseDUID,
-                          IA_NAInfo{std::move(relayAddr), std::move(leaseAddr)}};
-    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-              DHCP6_EXPORTER_LEASE6_RELEASE_ALLOCATION_INFO)
-        .arg(routeInfo.toString());
-
-    // remove route export from the switch
-    m_service->removeRoute(routeInfo);
-    */
-}
-
 using isc::dhcp::LeaseMgrFactory;
 
 static Lease6Ptr findIA_NALeaseByDUID_IAID(const isc::dhcp::DuidPtr& duid,
@@ -192,6 +161,93 @@ static Lease6Ptr findIA_NALeaseByDUID_IAID(const isc::dhcp::DuidPtr& duid,
         }
     }
     return matchedByIAIDDUIDLeaseIA_NA;
+}
+
+// TODO: correctly handle different subnets
+static size_t getActiveAndExpiredLeasesSize(isc::dhcp::Lease::Type    type,
+                                            const isc::dhcp::DuidPtr& duidPtr,
+                                            uint32_t                  iaid) {
+    constexpr size_t ExpiredLeasesSize{20};
+
+    size_t result{0};
+    auto&  leaseMgr{LeaseMgrFactory::instance()};
+    if (duidPtr) {
+        const auto& duid{*duidPtr};
+        auto        activeLeaseCollection{leaseMgr.getLeases6(type, duid, iaid)};
+        result += activeLeaseCollection.size();
+        //isc::dhcp::Lease6Collection expiredLeaseCollection;
+        //leaseMgr.getExpiredLeases6(expiredLeaseCollection, ExpiredLeasesSize);
+        //result += expiredLeaseCollection.size();
+    }
+    return result;
+}
+
+void DHCP6ExporterImpl::handleLease6Expire(CalloutHandle& handle) {
+    Lease6Ptr lease;
+    bool      remove_lease;
+
+    handle.getArgument("lease6", lease);
+    handle.getArgument("remove_lease", remove_lease);
+
+    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_LEASE6_EXPIRE)
+        .arg(lease->toText())
+        .arg(remove_lease);
+
+    auto     leaseAddr{lease->addr_};
+    auto     leaseAddrPrefixLength{lease->prefixlen_};
+    uint32_t leaseIAID{lease->iaid_};
+    auto     leaseDUID{lease->duid_};
+    uint32_t noneTransactionId{};
+
+    switch (lease->getType()) {
+        case isc::dhcp::Lease::TYPE_NA: {
+            // find number of active and reclaimed leases.
+            // If we are a last lease, remove route
+            size_t activeAndExpiredLeasesSize{getActiveAndExpiredLeasesSize(
+                isc::dhcp::Lease::TYPE_NA, leaseDUID, leaseIAID)};
+
+            LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                      DHCP6_EXPORTER_LEASE6_EXPIRE_COUNT_INFO)
+                .arg("IA_NA")
+                .arg(leaseDUID)
+                .arg(leaseIAID)
+                .arg(activeAndExpiredLeasesSize);
+
+            //if (activeAndExpiredLeasesSize == 1) {
+                RouteExport routeInfo{noneTransactionId, leaseIAID, leaseDUID,
+                                      IA_NAInfoFuzzyRemove{std::move(leaseAddr)}};
+                LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                          DHCP6_EXPORTER_LEASE6_EXPIRE_ALLOCATION_INFO)
+                    .arg(routeInfo.toString());
+                m_service->removeRoute(routeInfo);
+            //}
+        } break;
+        case isc::dhcp::Lease::TYPE_PD: {
+            // find number of active and reclaimed leases.
+            // If we are a last lease, remove route
+            size_t activeAndExpiredLeasesSize{getActiveAndExpiredLeasesSize(
+                isc::dhcp::Lease::TYPE_PD, leaseDUID, leaseIAID)};
+
+            LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                      DHCP6_EXPORTER_LEASE6_EXPIRE_COUNT_INFO)
+                .arg("IA_PD")
+                .arg(leaseDUID)
+                .arg(leaseIAID)
+                .arg(activeAndExpiredLeasesSize);
+
+           // if (activeAndExpiredLeasesSize == 1) {
+                RouteExport routeInfo{
+                    noneTransactionId, leaseIAID, leaseDUID,
+                    IA_PDInfoFuzzyRemove{std::move(leaseAddr), leaseAddrPrefixLength}};
+                LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                          DHCP6_EXPORTER_LEASE6_EXPIRE_ALLOCATION_INFO)
+                    .arg(routeInfo.toString());
+                m_service->removeRoute(routeInfo);
+            //}
+        } break;
+        case isc::dhcp::Lease::TYPE_TA:
+        case isc::dhcp::Lease::TYPE_V4: break;
+    }
 }
 
 void DHCP6ExporterImpl::handleLease6Release(CalloutHandle& handle) {

@@ -57,13 +57,8 @@ class NXOSManagementClient : public ManagementClient {
     void removeRoutesFromSwitch(const RouteExport& route) override;
 
   private:
-    isc::asiolink::IOServicePtr m_ioService;
-    NXOSHttpClientPtr           m_httpClient;
-    // we use cpp-httplib as HTTP client because Kea HttpClient can't handle chunked
-    // encoding fron NXOS
-    // isc::http::HttpClientPtr     m_httpClient;
-    // isc::asiolink::TlsContextPtr m_tlsContext;
-    NXOSConnectionConfigParams m_params;
+    using AddressLookupHandler =
+        std::function<void(const NXOSResponse::RouteLookupResponse&)>;
 
   private:
     NXOSHttpClientPtr m_httpClient;
@@ -79,16 +74,13 @@ class NXOSManagementClient : public ManagementClient {
     int                                       m_poolSize{4};
 
   private:
-    // void sendRequest(const string&                           uri,
-    //                 ConstElementPtr                         requestBody,
-    //                 NXOSHttpClient::ResponseHandlerCallback responseHandler = {},
-    //                 int                                     timeout         = 10000);
-
-    // void addBasicAuthHeader(PostHttpRequestJsonRpcPtr request) const;
-
     bool clientConnectHandler(const boost::system::error_code& ec, int tcpNativeFd);
 
     void clientCloseHandler(int tcpNativeFd);
+
+    void asyncLookupAddress(const string&               lookupAddrStr,
+                            const string&               lookupAddrType,
+                            const AddressLookupHandler& responseHandler);
 
     void handleRouteApply(JsonRpcResponsePtr response,
                           const string&      src,
@@ -97,7 +89,4 @@ class NXOSManagementClient : public ManagementClient {
     void handleRouteRemove(JsonRpcResponsePtr response,
                            const string&      src,
                            const string&      dst);
-
-    State getState() const noexcept { return m_state; }
-    void  setState(State newState);
 };

@@ -3,6 +3,7 @@
 #include "log.hpp"
 #include "nxos/nxos_structs.hpp"
 #include "post_request_jsonrpc.hpp"
+#include <algorithm>
 #include <asiolink/asio_wrapper.h>
 #include <asiolink/crypto_tls.h>
 #include <asiolink/io_service.h>
@@ -18,6 +19,7 @@
 #include <http/post_request_json.h>
 #include <http/response_json.h>
 #include <httplib.h>
+#include <regex>
 
 using isc::data::ConstElementPtr;
 using isc::data::Element;
@@ -36,6 +38,14 @@ static JsonRpcResponse validateResponse(const string& response) {
 
 #define FIELD_ERROR_STR(field_name, what) \
     "Field \"" field_name "\" in \"connection-params\" " what
+
+static const std::regex VlanIfRegex("(vlan)(\\d+)",
+                                    std::regex_constants::icase |
+                                        std::regex_constants::ECMAScript);
+
+static inline bool isValidVlanName(const string& ifName) {
+    return std::regex_match(ifName, VlanIfRegex);
+}
 
 static NXOSConnectionConfigParams parseConfig(ConstElementPtr& mgmtConnParams) {
     if (!mgmtConnParams) {
@@ -129,109 +139,7 @@ static NXOSConnectionConfigParams parseConfig(ConstElementPtr& mgmtConnParams) {
 }
 
 NXOSManagementClient::NXOSManagementClient(ConstElementPtr mgmtConnParams) :
-    m_params(parseConfig(mgmtConnParams)) {
-
-    m_ioService.reset(new IOService());
-}
-
-void NXOSManagementClient::setState(State newState) {
-    std::unique_lock<std::mutex> main_lck(m_mutexThreadPool);
-
-    m_state = newState;
-
-    switch (newState) {
-        case State::RUNNING: {
-            // Restart the IOService.
-            m_ioService->restart();
-
-            // While we have fewer threads than we should, make more.
-            while (m_threadPool.size() < m_poolSize) {
-                boost::shared_ptr<std::thread> thread(new std::thread([this] {
-                    std::unique_lock lock(m_mutexThreadPool);
-                    while (m_threadPool.size() < m_poolSize) {
-                        boost::shared_ptr<std::thread> t(new std::thread([this] {
-                            bool done = false;
-                            while (!done) {
-                                switch (getState()) {
-                                    case State::RUNNING: {
-                                        {
-                                            std::unique_lock lck(m_mutexThreadPool);
-                                            m_runningThreads++;
-                                            // If We're all running notify main thread.
-                                            if (m_runningThreads == m_poolSize) {
-                                                m_cv.notify_all();
-                                            }
-                                        }
-                                        try {
-                                            // Run the IOService.
-                                            m_ioService->run();
-                                        } catch (...) {
-                                            // Catch all exceptions.
-                                            // Logging is not available.
-                                        }
-                                        {
-                                            std::unique_lock lck(m_mutexThreadPool);
-                                            m_runningThreads--;
-                                        }
-                                        break;
-                                    }
-
-                                    case State::STOPPED: {
-                                        done = true;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            std::unique_lock lck(m_mutexThreadPool);
-                            m_exitedThreads++;
-
-                            // If we've all exited, notify main.
-                            if (m_exitedThreads == m_threadPool.size()) {
-                                m_cv.notify_all();
-                            }
-                        }));
-                        m_threadPool.push_back(t);
-                    }
-                    m_cv.wait(lock,
-                              [&] { return m_runningThreads == m_threadPool.size(); });
-                }));
-
-                // Add thread to the pool.
-                m_threadPool.push_back(thread);
-            }
-
-            // Main thread waits here until all threads are running.
-            m_cv.wait(main_lck,
-                      [&]() { return (m_runningThreads == m_threadPool.size()); });
-
-            m_exitedThreads = 0;
-            break;
-        }
-
-        case State::STOPPED: {
-            // Stop IOService.
-            if (!m_ioService->stopped()) {
-                try {
-                    m_ioService->poll();
-                } catch (...) {
-                    // Catch all exceptions.
-                    // Logging is not available.
-                }
-                m_ioService->stop();
-            }
-
-            // Main thread waits here until all threads have exited.
-            m_cv.wait(main_lck,
-                      [&]() { return (m_exitedThreads == m_threadPool.size()); });
-
-            for (auto const& thread : m_threadPool) { thread->join(); }
-
-            m_threadPool.clear();
-            break;
-        }
-    }
-}
+    m_params(parseConfig(mgmtConnParams)) {}
 
 void NXOSManagementClient::startClient(IOService& io_service) {
     if (m_params.connInfo.url.getScheme() == isc::http::Url::HTTPS) {
@@ -272,25 +180,13 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
         // get mapping vlan addr -> vlan id
         // if we handle IA_NA lease we need to receive mapping
         // from link-addr to vlan id
-        m_httpClient->sendRequest(
-            m_params.connInfo.url, EndpointName, {},
-            JsonRpcUtils::createRequestFromCommands(
-                1, createMappingVlanAddrToVlanIdCommand(linkAddrStr)),
-            [this, iaNAAddrStr, linkAddrStr](JsonRpcResponsePtr response) {
-                RouteLookupResponse routeLookup;
-                string              vlanIfName;
+
+        string linkAddrType{"RELAY_ADDRESS"};
+        asyncLookupAddress(
+            linkAddrStr, linkAddrType,
+            [this, iaNAAddrStr, linkAddrStr](const RouteLookupResponse& routeLookup) {
+                string vlanIfName;
                 try {
-                    // because we request only 1 command,
-                    // so it's safe to just access first item of response
-                    const auto& routeLookupRaw{response->front().result["body"]};
-                    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-                              DHCP6_EXPORTER_NXOS_RESPONSE_TRACE_DATA)
-                        .arg(RouteLookupResponse::name())
-                        .arg(connectionName())
-                        .arg(routeLookupRaw.dump());
-
-                    routeLookup = routeLookupRaw.get<RouteLookupResponse>();
-
                     // we know that link-address maps to one vlan.
                     // Otherwise, this is a error condition
                     if (routeLookup.table_vrf.size() != 1) {
@@ -380,7 +276,77 @@ static string createRemoveRouteIpv6Command(const string& srcSubnet,
     return Ipv6RouteCommandPrefix + srcSubnet + " " + dstAddr;
 }
 
+static string createRemoveNDCacheEntryIpv6Command(const string& vlanIfName) {
+    const string Ipv6RemoveNDCacheEntryPrefix{"clear ipv6 neighbor "};
+    const string ForceDeleteSuffix{" force-delete"};
+    return Ipv6RemoveNDCacheEntryPrefix + vlanIfName + ForceDeleteSuffix;
+}
+
+void NXOSManagementClient::asyncLookupAddress(
+    const string&               lookupAddrStr,
+    const string&               lookupAddrType,
+    const AddressLookupHandler& responseHandler) {
+    m_httpClient->sendRequest(
+        m_params.connInfo.url, EndpointName, {},
+        JsonRpcUtils::createRequestFromCommands(
+            1, createMappingVlanAddrToVlanIdCommand(lookupAddrStr)),
+        [this, responseHandler, lookupAddrStr,
+         lookupAddrType](JsonRpcResponsePtr response) {
+            RouteLookupResponse routeLookup;
+            try {
+                // because we request only 1 command,
+                // so it's safe to just access first item of response
+                const auto& routeLookupRaw{response->front().result["body"]};
+                LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                          DHCP6_EXPORTER_NXOS_RESPONSE_ADDR_LOOKUP_RECEIVED)
+                    .arg(connectionName())
+                    .arg(lookupAddrStr)
+                    .arg(lookupAddrType);
+                LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                          DHCP6_EXPORTER_NXOS_RESPONSE_ADDR_LOOKUP_RECEIVED_TRACE_DATA)
+                    .arg(connectionName())
+                    .arg(lookupAddrStr)
+                    .arg(lookupAddrType)
+                    .arg(routeLookupRaw.dump());
+
+                routeLookup = routeLookupRaw.get<RouteLookupResponse>();
+            } catch (const std::exception& ex) {
+                LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_NXOS_RESPONSE_PARSE_ERROR)
+                    .arg(connectionName())
+                    .arg(RouteLookupResponse::name())
+                    .arg(ex.what());
+                return;
+            }
+            if (responseHandler) { responseHandler(routeLookup); }
+        });
+}
+
+static Lease6Ptr findIA_NALeaseByDUID_IAID(const isc::dhcp::DuidPtr& duid,
+                                           uint32_t                  iaid) {
+    // TODO: check for SubnetID in leases and consequences of ignoring it
+    auto&     leaseMgr{LeaseMgrFactory::instance()};
+    Lease6Ptr matchedByIAIDDUIDLeaseIA_NA;
+    if (duid) {
+        const auto& leaseDUID{*duid};
+        auto        leaseCollection{
+            leaseMgr.getLeases6(isc::dhcp::Lease::TYPE_NA, leaseDUID, iaid)};
+
+        // we can have multiple lease entries,
+        // but they are in internal lease_state `STATE_EXPIRED_RECLAIMED`, skip them.
+        // We try to find an active one
+        for (const auto& lease : leaseCollection) {
+            if (lease->stateExpiredReclaimed() || lease->stateDeclined()) { continue; }
+            if (!matchedByIAIDDUIDLeaseIA_NA) {
+                matchedByIAIDDUIDLeaseIA_NA = lease;
+                break;
+            }
+        }
+    }
+    return matchedByIAIDDUIDLeaseIA_NA;
+}
+
 void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
+    auto dhcpv6TypeStr{route.toDHCPv6IATypeString()};
     if (std::holds_alternative<IA_NAInfo>(route.routeInfo)) {
         const auto& iaNAInfo{std::get<IA_NAInfo>(route.routeInfo)};
         string      linkAddrStr{iaNAInfo.srcVlanAddr.toText() + "/128"};
@@ -391,25 +357,12 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
         // get mapping vlan addr -> vlan id
         // if we handle IA_NA lease we need to receive mapping
         // from link-addr to vlan id
-        m_httpClient->sendRequest(
-            m_params.connInfo.url, EndpointName, {},
-            JsonRpcUtils::createRequestFromCommands(
-                1, createMappingVlanAddrToVlanIdCommand(linkAddrStr)),
-            [this, iaNAAddrStr, linkAddrStr](JsonRpcResponsePtr response) {
-                RouteLookupResponse routeLookup;
-                string              vlanIfName;
+        string linkAddrType{"RELAY_ADDRESS"};
+        asyncLookupAddress(
+            linkAddrStr, linkAddrType,
+            [this, iaNAAddrStr, linkAddrStr](const RouteLookupResponse& routeLookup) {
+                string vlanIfName;
                 try {
-                    // because we request only 1 command,
-                    // so it's safe to just access first item of response
-                    const auto& routeLookupRaw{response->front().result["body"]};
-                    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-                              DHCP6_EXPORTER_NXOS_RESPONSE_TRACE_DATA)
-                        .arg(RouteLookupResponse::name())
-                        .arg(connectionName())
-                        .arg(routeLookupRaw.dump());
-
-                    routeLookup = routeLookupRaw.get<RouteLookupResponse>();
-
                     // we know that link-address maps to one vlan.
                     // Otherwise, this is a error condition
                     if (routeLookup.table_vrf.size() != 1) {
@@ -491,6 +444,155 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
                 1, createRemoveRouteIpv6Command(srcIA_PDSubnetStr, dstIA_NAAddrStr)),
             [this, dstIA_NAAddrStr, srcIA_PDSubnetStr](JsonRpcResponsePtr response) {
                 handleRouteRemove(response, srcIA_PDSubnetStr, dstIA_NAAddrStr);
+            });
+    } else if (std::holds_alternative<IA_NAInfoFuzzyRemove>(route.routeInfo)) {
+        const auto& iaNAInfoFuzzy{std::get<IA_NAInfoFuzzyRemove>(route.routeInfo)};
+        string      iaNAAddrStr{iaNAInfoFuzzy.ia_naAddr.toText() + "/128"};
+
+        asyncLookupAddress(
+            iaNAAddrStr, dhcpv6TypeStr,
+            [this, iaNAAddrStr, dhcpv6TypeStr](const RouteLookupResponse& response) {
+                if (response.table_vrf.size() != 1) {
+                    isc_throw(
+                        isc::BadValue,
+                        "field \"TABLE_vrf\" of response does not contain exactly 1 item");
+                }
+                const auto& vrfRow{response.table_vrf[0]};
+                if (vrfRow.table_addrf.size() != 1) {
+                    isc_throw(
+                        isc::BadValue,
+                        "field \"TABLE_addrf\" of response does not contain exactly 1 item");
+                }
+                const auto& addrfRow{vrfRow.table_addrf[0]};
+                if (!addrfRow.table_prefix.has_value() &&
+                    addrfRow.table_prefix->size() != 1) {
+                    isc_throw(isc::BadValue,
+                              "field \"TABLE_prefix\" does not contain exactly 1 item");
+                }
+                const auto& prefixRow{(*addrfRow.table_prefix)[0]};
+                const auto& ipprefix{prefixRow.ipprefix};
+                if (prefixRow.table_path.size() != 1) {
+                    isc_throw(isc::BadValue,
+                              "field \"TABLE_path\" does not contain exactly 1 item");
+                }
+
+                const auto& cont{prefixRow.table_path[0].ifname};
+                auto        resultIt{
+                    std::find_if(cont.begin(), cont.end(), [](const auto& ifname) {
+                        return ifname.has_value() && isValidVlanName(*ifname);
+                    })};
+                if (resultIt == cont.end()) {
+                    isc_throw(isc::BadValue, "can't find vlan interface id");
+                }
+                string vlanIfName{**resultIt};
+
+                LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                          DHCP6_EXPORTER_NXOS_RESPONSE_IA_TYPE_ADDR_MAPPING_TRACE_DATA)
+                    .arg(dhcpv6TypeStr)
+                    .arg(connectionName())
+                    .arg(iaNAAddrStr)
+                    .arg(vlanIfName);
+
+                // after we receive vlanIfName, remove route
+                // also remove IPv6 ND cache entry for interface
+                m_httpClient->sendRequest(
+                    m_params.connInfo.url, EndpointName,
+                    {},    // TODO: correct handle tls
+                    JsonRpcUtils::createRequestFromCommands(
+                        {{1, createRemoveRouteIpv6Command(iaNAAddrStr, vlanIfName)},
+                         {2, createRemoveNDCacheEntryIpv6Command(vlanIfName)}}),
+                    [this, iaNAAddrStr, vlanIfName](JsonRpcResponsePtr response) {
+                        handleRouteRemove(response, iaNAAddrStr, vlanIfName);
+                    });
+            });
+    } else if (std::holds_alternative<IA_PDInfoFuzzyRemove>(route.routeInfo)) {
+        const auto& iaPDInfo{std::get<IA_PDInfoFuzzyRemove>(route.routeInfo)};
+        string      srcIA_PDSubnetStr{iaPDInfo.ia_pdPrefix.toText() + "/" +
+                                 std::to_string(iaPDInfo.ia_pdLength)};
+        auto        duid{route.duid};
+        auto        iaid{route.iaid};
+
+        // try to find IA_NA lease for given DUID + iaid in lease database
+        {
+            Lease6Ptr leaseIA_NA{findIA_NALeaseByDUID_IAID(duid, iaid)};
+            if (leaseIA_NA) {
+                auto dstIaNAAddrStr{leaseIA_NA->addr_.toText() + "/128"};
+                m_httpClient->sendRequest(
+                    m_params.connInfo.url, EndpointName,
+                    {},    // TODO: correct handle tls
+                    JsonRpcUtils::createRequestFromCommands(
+                        1,
+                        createRemoveRouteIpv6Command(srcIA_PDSubnetStr, dstIaNAAddrStr)),
+                    [this, dstIaNAAddrStr,
+                     srcIA_PDSubnetStr](JsonRpcResponsePtr response) {
+                        handleRouteRemove(response, srcIA_PDSubnetStr, dstIaNAAddrStr);
+                    });
+                return;
+            }
+        }
+        // fallback to switch lookup
+        asyncLookupAddress(
+            srcIA_PDSubnetStr, dhcpv6TypeStr,
+            [this, srcIA_PDSubnetStr](const RouteLookupResponse& response) {
+                if (response.table_vrf.size() != 1) {
+                    isc_throw(
+                        isc::BadValue,
+                        "field \"TABLE_vrf\" of response does not contain exactly 1 item");
+                }
+                const auto& vrfRow{response.table_vrf[0]};
+                if (vrfRow.table_addrf.size() != 1) {
+                    isc_throw(
+                        isc::BadValue,
+                        "field \"TABLE_addrf\" of response does not contain exactly 1 item");
+                }
+                const auto& addrfRow{vrfRow.table_addrf[0]};
+                if (!addrfRow.table_prefix.has_value() &&
+                    addrfRow.table_prefix->size() != 1) {
+                    // nothing we can remove
+                    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                              DHCP6_EXPORTER_NXOS_RESPONSE_FAILED)
+                        .arg("IA_PD")
+                        .arg(connectionName())
+                        .arg(srcIA_PDSubnetStr);
+                    return;
+                } else {
+                    // just use first match
+                    const auto& prefixRow{(*addrfRow.table_prefix)[0]};
+                    const auto& ipprefix{prefixRow.ipprefix};
+                    if (prefixRow.table_path.size() != 1) {
+                        isc_throw(isc::BadValue,
+                                  "field \"TABLE_path\" does not contain exactly 1 item");
+                    }
+                    // find first ROW_path that have "ipnexthop" field
+                    const auto& ipnexthop{prefixRow.table_path[0].ipnexthop};
+                    auto        resultIt{std::find_if(
+                        ipnexthop.begin(), ipnexthop.end(),
+                        [](const auto& nexthop) { return nexthop.has_value(); })};
+                    if (resultIt == ipnexthop.end()) {
+                        isc_throw(isc::BadValue, "can't find IA_NA address");
+                    }
+                    string iaNAAddrStr{**resultIt};
+
+                    LOG_DEBUG(
+                        DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                        DHCP6_EXPORTER_NXOS_RESPONSE_IA_TYPE_ADDR_MAPPING_TRACE_DATA)
+                        .arg("IA_PD")
+                        .arg(connectionName())
+                        .arg(srcIA_PDSubnetStr)
+                        .arg(iaNAAddrStr);
+
+                    // after we receive IA_NA addr, remove route
+                    m_httpClient->sendRequest(
+                        m_params.connInfo.url, EndpointName,
+                        {},    // TODO: correct handle tls
+                        JsonRpcUtils::createRequestFromCommands(
+                            1,
+                            createRemoveRouteIpv6Command(srcIA_PDSubnetStr, iaNAAddrStr)),
+                        [this, iaNAAddrStr,
+                         srcIA_PDSubnetStr](JsonRpcResponsePtr response) {
+                            handleRouteRemove(response, srcIA_PDSubnetStr, iaNAAddrStr);
+                        });
+                }
             });
     } else {
         isc_throw(isc::NotImplemented, "not implemented IA route info");
