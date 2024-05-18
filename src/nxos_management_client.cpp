@@ -527,10 +527,13 @@ void NXOSManagementClient::handleRouteApply(JsonRpcResponsePtr response,
 void NXOSManagementClient::handleRouteRemove(JsonRpcResponsePtr response,
                                              const string&      src,
                                              const string&      dst) {
-    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-              DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED)
-        .arg(connectionName())
-        .arg(src)
-        .arg(dst);
-    isc_throw(isc::NotImplemented, "handleRouteRemove not implemented");
+    try {
+        isc_throw(isc::NotImplemented, "handleRouteRemove not implemented");
+    } catch (const std::exception& ex) {
+        LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED)
+            .arg(connectionName())
+            .arg(src)
+            .arg(dst)
+            .arg(ex.what());
+    }
 }

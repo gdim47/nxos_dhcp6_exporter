@@ -41,6 +41,7 @@ void DHCP6ExporterService::exportRoute(const RouteExport& route) {
 
 void DHCP6ExporterService::removeRoute(const RouteExport& route) {
     LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_REMOVE_INFO_ON_DEVICE)
+        .arg(m_client->connectionName())
         .arg(route.tid)
         .arg(route.iaid);
     LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC_DATA,

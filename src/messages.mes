@@ -37,21 +37,23 @@
 % DHCP6_EXPORTER_LEASE6_REBIND lease6_rebind: query6: %1, lease6: %2, ia_option: %3
 % DHCP6_EXPORTER_LEASE6_REBIND_FAILED lease6_rebind failed: reason: %1
 
-% DHCP6_EXPORTER_LEASE6_EXPIRE lease6_expire: lease6: %1, remove_lease: %2 
+% DHCP6_EXPORTER_LEASE6_EXPIRE lease6_expire: lease6: %1, remove_lease: %2
+% DHCP6_EXPORTER_LEASE6_EXPIRE_COUNT_INFO lease6_expire leases count for type %1: duid: {%2}, iaid: {%3}, cnt: {%4} 
+% DHCP6_EXPORTER_LEASE6_EXPIRE_ALLOCATION_INFO lease6_expire allocation info: route_export: {%1}
 % DHCP6_EXPORTER_LEASE6_EXPIRE_FAILED lease6_expire failed: reason: %1
 
 % DHCP6_EXPORTER_LEASE6_RELEASE lease6_release: query6: %1, lease6: %2
 % DHCP6_EXPORTER_LEASE6_RELEASE_FAILED lease6_release failed: reason: %1
 % DHCP6_EXPORTER_LEASE6_RELEASE_ALLOCATION_INFO lease6_release allocation info: route_export: {%1}
 % DHCP6_EXPORTER_REMOVE_INFO_ON_DEVICE Remove route from switch{%1}: tid: {%2}, iaid: {%3}
-% DHCP6_EXPORTER_REMOVE_INFO_ON_DEVICE_ROUTE_EXPORT_DATA Remove route info from switch{%1}: route_export: {%1} 
-% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED Failed to remove route for switch{%1}: src: {%2}, dst: {%3}
+% DHCP6_EXPORTER_REMOVE_INFO_ON_DEVICE_ROUTE_EXPORT_DATA Remove route info from switch{%1}: route_export: {%2} 
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED Failed to remove route for switch{%1}: src: {%2}, dst: {%3}, reason: {%4}
 % DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_MULTIPLE_LEASES_WARNING Multiple leases for DUID+IAID+IA_NA query detected while handling route removal for switch{%1}
 % DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_MULTIPLE_LEASES_DATA Multiple leases for type IA_NA in lease database for switch{%1}: route_export: {%2}
 % DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_FIND_IA_NA_LEASE_FAILED Can't find IA_NA pair for IA_PD lease release: iaid: {%2}, duid: {%3}
 
 % DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE Send update routes on switch according to new lease: tid: {%1}, iaid: {%2}
-% DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE_ROUTE_EXPORT_DATA Update info on switch{%1}: route_export: {%1} 
+% DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE_ROUTE_EXPORT_DATA Update info on switch{%1}: route_export: {%2} 
 
 % DHCP6_EXPORTER_UPDATE_INFO_COMMUNICATION_FAILED Failed to update routes on switch{%1}: %2
 
@@ -59,11 +61,16 @@
 
 % DHCP6_EXPORTER_NXOS_RESPONSE_PARSE_ERROR Failed to parse response from NX-OS switch{%1} to %2: %3
 
-% DHCP6_EXPORTER_NXOS_RESPONSE_TRACE_DATA Received %1 response data for switch{%2}: %3
-
 % DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_ERROR Failed to map vlan interface address to vlan id for switch{%1}: %2
 
+% DHCP6_EXPORTER_NXOS_RESPONSE_ADDR_LOOKUP_RECEIVED Received address lookup from switch{%1}: lookup_addr: {%2}, lookup_addr_type: {%3}
+% DHCP6_EXPORTER_NXOS_RESPONSE_ADDR_LOOKUP_RECEIVED_TRACE_DATA Received address lookup trace from switch{%1}: lookup_addr: {%2}, lookup_addr_type: {%3}, route_lookup: {%4}
+
 % DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_TRACE_DATA Received mapping from vlan addr to vlan id for switch{%1}: vlan_addr: {%2}, vlan_id: {%3}
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_IA_TYPE_ADDR_MAPPING_TRACE_DATA Received address mapping for %1 addr for switch{%2}: ia_addr: {%3}, vlan_id: {%4}
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_FAILED Can't find mapping for %1 addr for switch{%2}: src_addr: {%3}
 
 % DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_TRACE_DATA Handle route applying for switch{%1}: src: {%2}, dst: {%3}
 
