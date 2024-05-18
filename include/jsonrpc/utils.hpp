@@ -28,7 +28,7 @@ struct JsonRpcResponse {
     json   result;
 };
 
-using JsonRpcResponsePtr = boost::shared_ptr<JsonRpcResponse>;
+using JsonRpcResponsePtr = boost::shared_ptr<std::vector<JsonRpcResponse>>;
 
 class JsonRpcException : public std::exception {
   public:
@@ -98,7 +98,8 @@ class JsonRpcException : public std::exception {
 
 class JsonRpcUtils {
   public:
-    static ConstElementPtr createRequestFromCommand(int id, const string& command);
-    static JsonRpcResponse handleResponse(const string& responseBody);
+    static ConstElementPtr createRequestFromCommands(int id, const string& commands);
+    static ConstElementPtr
+        createRequestFromCommands(const std::vector<std::pair<int, string>>& commands);
+    static std::vector<JsonRpcResponse> handleResponse(const string& responseBody);
 };
-

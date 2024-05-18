@@ -138,7 +138,7 @@ void NXOSHttpClientImpl::stopClient() { setThreadsState(ThreadState::STOPPED); }
 
 NXOSHttpClientImpl::~NXOSHttpClientImpl() { setThreadsState(ThreadState::STOPPED); }
 
-static JsonRpcResponse validateResponse(const string& response) {
+static std::vector<JsonRpcResponse> validateResponse(const string& response) {
     if (response.empty()) { isc_throw(isc::BadValue, "no body found in the response"); }
 
     return JsonRpcUtils::handleResponse(response);
@@ -151,61 +151,61 @@ void NXOSHttpClientImpl::sendRequest(
     ConstElementPtr                         requestBody,
     NXOSHttpClient::ResponseHandlerCallback responseHandler,
     int                                     timeout) {
-    m_ioService->post([this, responseHandler, url, tlsContext, timeout, endpointName,
-                       requestBody] {
-        const auto& connectionName{url.toText()};
-        bool        isHttpsScheme{url.getScheme() == Url::Scheme::HTTPS};
-        if (isHttpsScheme) {
-            if (!tlsContext) {
-                isc_throw(isc::NotImplemented,
-                          "https tls context not implemented for requests");
-            }
-        } else {
-            Client cli(url.getStrippedHostname(), url.getPort());
-            cli.set_connection_timeout(timeout);
-            if (m_basicAuth) {
-                const string& secret{m_basicAuth->getSecret()};
-                // Extract the password part (substring from the position after the colon
-                // to the end)
-                auto pos{secret.find(':')};
-                if (pos != string::npos) {
-                    string login    = secret.substr(0, pos);
-                    string password = secret.substr(pos + 1);
-                    cli.set_basic_auth(login, password);
+    m_ioService->post(
+        [this, responseHandler, url, tlsContext, timeout, endpointName, requestBody] {
+            const auto& connectionName{url.toText()};
+            bool        isHttpsScheme{url.getScheme() == Url::Scheme::HTTPS};
+            if (isHttpsScheme) {
+                if (!tlsContext) {
+                    isc_throw(isc::NotImplemented,
+                              "https tls context not implemented for requests");
+                }
+            } else {
+                Client cli(url.getStrippedHostname(), url.getPort());
+                cli.set_connection_timeout(timeout);
+                if (m_basicAuth) {
+                    const string& secret{m_basicAuth->getSecret()};
+                    // Extract the password part (substring from the position after the
+                    // colon to the end)
+                    auto pos{secret.find(':')};
+                    if (pos != string::npos) {
+                        string login    = secret.substr(0, pos);
+                        string password = secret.substr(pos + 1);
+                        cli.set_basic_auth(login, password);
+                    }
+                }
+
+                auto response{
+                    cli.Post(endpointName, requestBody->str(), "application/json-rpc")};
+                if (!response) {
+                    LOG_ERROR(DHCP6ExporterLogger,
+                              DHCP6_EXPORTER_UPDATE_INFO_COMMUNICATION_FAILED)
+                        .arg(connectionName)
+                        .arg(httplib::to_string(response.error()));
+                    return;
+                }
+
+                auto                         status       = response->status;
+                auto                         responseBody = response->body;
+                std::vector<JsonRpcResponse> jsonRpcResponseRaw;
+                try {
+                    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                              DHCP6_EXPORTER_LOG_RESPONSE)
+                        .arg(responseBody);
+
+                    jsonRpcResponseRaw = validateResponse(responseBody);
+                } catch (const std::exception& ex) {
+                    LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_JSON_RPC_VALIDATE_ERROR)
+                        .arg(connectionName)
+                        .arg(ex.what());
+                    return;
+                }
+                if (responseHandler) {
+                    responseHandler(boost::make_shared<std::vector<JsonRpcResponse>>(
+                        std::move(jsonRpcResponseRaw)));
                 }
             }
-
-            auto response{
-                cli.Post(endpointName, requestBody->str(), "application/json-rpc")};
-            if (!response) {
-                LOG_ERROR(DHCP6ExporterLogger,
-                          DHCP6_EXPORTER_UPDATE_INFO_COMMUNICATION_FAILED)
-                    .arg(connectionName)
-                    .arg(httplib::to_string(response.error()));
-                return;
-            }
-
-            auto            status       = response->status;
-            auto            responseBody = response->body;
-            JsonRpcResponse jsonRpcResponseRaw;
-            try {
-                LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-                          DHCP6_EXPORTER_LOG_RESPONSE)
-                    .arg(responseBody);
-
-                jsonRpcResponseRaw = validateResponse(responseBody);
-            } catch (const std::exception& ex) {
-                LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_JSON_RPC_VALIDATE_ERROR)
-                    .arg(connectionName)
-                    .arg(ex.what());
-                return;
-            }
-            if (responseHandler) {
-                responseHandler(
-                    boost::make_shared<JsonRpcResponse>(std::move(jsonRpcResponseRaw)));
-            }
-        }
-    });
+        });
 }
 
 void NXOSHttpClientImpl::setBasicAuth(const BasicHttpAuthPtr& auth) {

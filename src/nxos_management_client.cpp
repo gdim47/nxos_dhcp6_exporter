@@ -274,13 +274,15 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
         // from link-addr to vlan id
         m_httpClient->sendRequest(
             m_params.connInfo.url, EndpointName, {},
-            JsonRpcUtils::createRequestFromCommand(
+            JsonRpcUtils::createRequestFromCommands(
                 1, createMappingVlanAddrToVlanIdCommand(linkAddrStr)),
             [this, iaNAAddrStr, linkAddrStr](JsonRpcResponsePtr response) {
                 RouteLookupResponse routeLookup;
                 string              vlanIfName;
                 try {
-                    const auto& routeLookupRaw{response->result["body"]};
+                    // because we request only 1 command,
+                    // so it's safe to just access first item of response
+                    const auto& routeLookupRaw{response->front().result["body"]};
                     LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
                               DHCP6_EXPORTER_NXOS_RESPONSE_TRACE_DATA)
                         .arg(RouteLookupResponse::name())
@@ -316,11 +318,14 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
                                   "field \"TABLE_path\" does not contain exactly 1 item");
                     }
 
-                    vlanIfName = prefixRow.table_path[0].ifname.front();
-
-                    if (vlanIfName.empty()) {
+                    const auto& ifnames{prefixRow.table_path[0].ifname};
+                    auto        resultIt{std::find_if(
+                        ifnames.begin(), ifnames.end(),
+                        [](const auto& ifname) { return ifname.has_value(); })};
+                    if (resultIt == ifnames.end()) {
                         isc_throw(isc::BadValue, "vlan interface id is empty");
                     }
+                    vlanIfName = **resultIt;
                 } catch (const isc::BadValue& ex) {
                     LOG_ERROR(DHCP6ExporterLogger,
                               DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_ERROR)
@@ -345,7 +350,7 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
                 m_httpClient->sendRequest(
                     m_params.connInfo.url, EndpointName,
                     {},    // TODO: correct handle tls
-                    JsonRpcUtils::createRequestFromCommand(
+                    JsonRpcUtils::createRequestFromCommands(
                         1, createApplyRouteIpv6Command(iaNAAddrStr, vlanIfName)),
                     [this, iaNAAddrStr, vlanIfName](JsonRpcResponsePtr response) {
                         handleRouteApply(response, iaNAAddrStr, vlanIfName);
@@ -359,7 +364,7 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
 
         m_httpClient->sendRequest(
             m_params.connInfo.url, EndpointName, {},
-            JsonRpcUtils::createRequestFromCommand(
+            JsonRpcUtils::createRequestFromCommands(
                 1, createApplyRouteIpv6Command(srcIA_PDSubnetStr, dstIA_NAAddrStr)),
             [this, srcIA_PDSubnetStr, dstIA_NAAddrStr](JsonRpcResponsePtr response) {
                 handleRouteApply(response, srcIA_PDSubnetStr, dstIA_NAAddrStr);
@@ -388,13 +393,15 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
         // from link-addr to vlan id
         m_httpClient->sendRequest(
             m_params.connInfo.url, EndpointName, {},
-            JsonRpcUtils::createRequestFromCommand(
+            JsonRpcUtils::createRequestFromCommands(
                 1, createMappingVlanAddrToVlanIdCommand(linkAddrStr)),
             [this, iaNAAddrStr, linkAddrStr](JsonRpcResponsePtr response) {
                 RouteLookupResponse routeLookup;
                 string              vlanIfName;
                 try {
-                    const auto& routeLookupRaw{response->result["body"]};
+                    // because we request only 1 command,
+                    // so it's safe to just access first item of response
+                    const auto& routeLookupRaw{response->front().result["body"]};
                     LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
                               DHCP6_EXPORTER_NXOS_RESPONSE_TRACE_DATA)
                         .arg(RouteLookupResponse::name())
@@ -430,11 +437,15 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
                                   "field \"TABLE_path\" does not contain exactly 1 item");
                     }
 
-                    vlanIfName = prefixRow.table_path[0].ifname.front();
-
-                    if (vlanIfName.empty()) {
+                    const auto& ifnames{prefixRow.table_path[0].ifname};
+                    auto        resultIt{std::find_if(
+                        ifnames.begin(), ifnames.end(),
+                        [](const auto& ifname) { return ifname.has_value(); })};
+                    if (resultIt == ifnames.end()) {
                         isc_throw(isc::BadValue, "vlan interface id is empty");
                     }
+                    vlanIfName = **resultIt;
+
                 } catch (const isc::BadValue& ex) {
                     LOG_ERROR(DHCP6ExporterLogger,
                               DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_ERROR)
@@ -456,11 +467,13 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
                     .arg(vlanIfName);
 
                 // after we receive vlanIfName, remove route
+                // also remove IPv6 ND cache entry for interface
                 m_httpClient->sendRequest(
                     m_params.connInfo.url, EndpointName,
                     {},    // TODO: correct handle tls
-                    JsonRpcUtils::createRequestFromCommand(
-                        1, createRemoveRouteIpv6Command(iaNAAddrStr, vlanIfName)),
+                    JsonRpcUtils::createRequestFromCommands(
+                        {{1, createRemoveRouteIpv6Command(iaNAAddrStr, vlanIfName)},
+                         {2, createRemoveNDCacheEntryIpv6Command(vlanIfName)}}),
                     [this, iaNAAddrStr, vlanIfName](JsonRpcResponsePtr response) {
                         handleRouteRemove(response, iaNAAddrStr, vlanIfName);
                     });
@@ -474,7 +487,7 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
         // now, send remove route request
         m_httpClient->sendRequest(
             m_params.connInfo.url, EndpointName, {},
-            JsonRpcUtils::createRequestFromCommand(
+            JsonRpcUtils::createRequestFromCommands(
                 1, createRemoveRouteIpv6Command(srcIA_PDSubnetStr, dstIA_NAAddrStr)),
             [this, dstIA_NAAddrStr, srcIA_PDSubnetStr](JsonRpcResponsePtr response) {
                 handleRouteRemove(response, srcIA_PDSubnetStr, dstIA_NAAddrStr);
