@@ -82,11 +82,19 @@ class NXOSManagementClient : public ManagementClient {
                             const string&               lookupAddrType,
                             const AddressLookupHandler& responseHandler);
 
-    void handleRouteApply(JsonRpcResponsePtr response,
-                          const string&      src,
-                          const string&      dst);
+    void handleRouteApply(const string&                 routeAddrTypeStr,
+                          JsonRpcResponsePtr            response,
+                          const string&                 src,
+                          const string&                 dst,
+                          NXOSHttpClient::ResponseError responseError,
+                          NXOSHttpClient::StatusCode    statusCode,
+                          JsonRpcExceptionPtr           jsonRpcException);
 
-    void handleRouteRemove(JsonRpcResponsePtr response,
-                           const string&      src,
-                           const string&      dst);
+    void handleRouteRemove(const string&                 routeAddrTypeStr,
+                           JsonRpcResponsePtr            response,
+                           const string&                 src,
+                           const string&                 dst,
+                           NXOSHttpClient::ResponseError responseError,
+                           NXOSHttpClient::StatusCode    statusCode,
+                           JsonRpcExceptionPtr           jsonRpcException);
 };

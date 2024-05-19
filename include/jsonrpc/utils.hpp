@@ -96,6 +96,8 @@ class JsonRpcException : public std::exception {
     string m_err;
 };
 
+using JsonRpcExceptionPtr = boost::shared_ptr<JsonRpcException>;
+
 class JsonRpcUtils {
   public:
     static ConstElementPtr createRequestFromCommands(int id, const string& commands);

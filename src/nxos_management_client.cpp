@@ -172,6 +172,7 @@ static string createMappingVlanAddrToVlanIdCommand(const string& vlanAddr) {
 }
 
 void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
+    auto dhcpv6TypeStr{route.toDHCPv6IATypeString()};
     if (std::holds_alternative<IA_NAInfo>(route.routeInfo)) {
         const auto& iaNAInfo{std::get<IA_NAInfo>(route.routeInfo)};
         string      linkAddrStr{iaNAInfo.srcVlanAddr.toText() + "/128"};
@@ -184,7 +185,8 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
         string linkAddrType{"RELAY_ADDRESS"};
         asyncLookupAddress(
             linkAddrStr, linkAddrType,
-            [this, iaNAAddrStr, linkAddrStr](const RouteLookupResponse& routeLookup) {
+            [this, iaNAAddrStr, linkAddrStr,
+             dhcpv6TypeStr](const RouteLookupResponse& routeLookup) {
                 string vlanIfName;
                 try {
                     // we know that link-address maps to one vlan.
@@ -248,8 +250,13 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
                     {},    // TODO: correct handle tls
                     JsonRpcUtils::createRequestFromCommands(
                         1, createApplyRouteIpv6Command(iaNAAddrStr, vlanIfName)),
-                    [this, iaNAAddrStr, vlanIfName](JsonRpcResponsePtr response) {
-                        handleRouteApply(response, iaNAAddrStr, vlanIfName);
+                    [this, iaNAAddrStr, vlanIfName,
+                     dhcpv6TypeStr](JsonRpcResponsePtr            response,
+                                    NXOSHttpClient::ResponseError responseError,
+                                    NXOSHttpClient::StatusCode    statusCode,
+                                    JsonRpcExceptionPtr           jsonRpcException) {
+                        handleRouteApply(dhcpv6TypeStr, response, iaNAAddrStr, vlanIfName,
+                                         responseError, statusCode, jsonRpcException);
                     });
             });
     } else if (std::holds_alternative<IA_PDInfo>(route.routeInfo)) {
@@ -262,8 +269,13 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
             m_params.connInfo.url, EndpointName, {},
             JsonRpcUtils::createRequestFromCommands(
                 1, createApplyRouteIpv6Command(srcIA_PDSubnetStr, dstIA_NAAddrStr)),
-            [this, srcIA_PDSubnetStr, dstIA_NAAddrStr](JsonRpcResponsePtr response) {
-                handleRouteApply(response, srcIA_PDSubnetStr, dstIA_NAAddrStr);
+            [this, srcIA_PDSubnetStr, dstIA_NAAddrStr, dhcpv6TypeStr](
+                JsonRpcResponsePtr response, NXOSHttpClient::ResponseError responseError,
+                NXOSHttpClient::StatusCode statusCode,
+                JsonRpcExceptionPtr        jsonRpcException) {
+                handleRouteApply(dhcpv6TypeStr, response, srcIA_PDSubnetStr,
+                                 dstIA_NAAddrStr, responseError, statusCode,
+                                 jsonRpcException);
             });
     } else {
         isc_throw(isc::NotImplemented, "not implemented IA route info");
@@ -290,8 +302,9 @@ void NXOSManagementClient::asyncLookupAddress(
         m_params.connInfo.url, EndpointName, {},
         JsonRpcUtils::createRequestFromCommands(
             1, createMappingVlanAddrToVlanIdCommand(lookupAddrStr)),
-        [this, responseHandler, lookupAddrStr,
-         lookupAddrType](JsonRpcResponsePtr response) {
+        [this, responseHandler, lookupAddrStr, lookupAddrType](
+            JsonRpcResponsePtr response, NXOSHttpClient::ResponseError responseError,
+            NXOSHttpClient::StatusCode statusCode, JsonRpcExceptionPtr jsonRpcException) {
             RouteLookupResponse routeLookup;
             try {
                 // because we request only 1 command,
@@ -360,7 +373,8 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
         string linkAddrType{"RELAY_ADDRESS"};
         asyncLookupAddress(
             linkAddrStr, linkAddrType,
-            [this, iaNAAddrStr, linkAddrStr](const RouteLookupResponse& routeLookup) {
+            [this, iaNAAddrStr, linkAddrStr,
+             dhcpv6TypeStr](const RouteLookupResponse& routeLookup) {
                 string vlanIfName;
                 try {
                     // we know that link-address maps to one vlan.
@@ -427,8 +441,14 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
                     JsonRpcUtils::createRequestFromCommands(
                         {{1, createRemoveRouteIpv6Command(iaNAAddrStr, vlanIfName)},
                          {2, createRemoveNDCacheEntryIpv6Command(vlanIfName)}}),
-                    [this, iaNAAddrStr, vlanIfName](JsonRpcResponsePtr response) {
-                        handleRouteRemove(response, iaNAAddrStr, vlanIfName);
+                    [this, iaNAAddrStr, vlanIfName,
+                     dhcpv6TypeStr](JsonRpcResponsePtr            response,
+                                    NXOSHttpClient::ResponseError responseError,
+                                    NXOSHttpClient::StatusCode    statusCode,
+                                    JsonRpcExceptionPtr           jsonRpcException) {
+                        handleRouteRemove(dhcpv6TypeStr, response, iaNAAddrStr,
+                                          vlanIfName, responseError, statusCode,
+                                          jsonRpcException);
                     });
             });
     } else if (std::holds_alternative<IA_PDInfo>(route.routeInfo)) {
@@ -442,8 +462,13 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
             m_params.connInfo.url, EndpointName, {},
             JsonRpcUtils::createRequestFromCommands(
                 1, createRemoveRouteIpv6Command(srcIA_PDSubnetStr, dstIA_NAAddrStr)),
-            [this, dstIA_NAAddrStr, srcIA_PDSubnetStr](JsonRpcResponsePtr response) {
-                handleRouteRemove(response, srcIA_PDSubnetStr, dstIA_NAAddrStr);
+            [this, dstIA_NAAddrStr, srcIA_PDSubnetStr, dhcpv6TypeStr](
+                JsonRpcResponsePtr response, NXOSHttpClient::ResponseError responseError,
+                NXOSHttpClient::StatusCode statusCode,
+                JsonRpcExceptionPtr        jsonRpcException) {
+                handleRouteRemove(dhcpv6TypeStr, response, srcIA_PDSubnetStr,
+                                  dstIA_NAAddrStr, responseError, statusCode,
+                                  jsonRpcException);
             });
     } else if (std::holds_alternative<IA_NAInfoFuzzyRemove>(route.routeInfo)) {
         const auto& iaNAInfoFuzzy{std::get<IA_NAInfoFuzzyRemove>(route.routeInfo)};
@@ -501,8 +526,14 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
                     JsonRpcUtils::createRequestFromCommands(
                         {{1, createRemoveRouteIpv6Command(iaNAAddrStr, vlanIfName)},
                          {2, createRemoveNDCacheEntryIpv6Command(vlanIfName)}}),
-                    [this, iaNAAddrStr, vlanIfName](JsonRpcResponsePtr response) {
-                        handleRouteRemove(response, iaNAAddrStr, vlanIfName);
+                    [this, iaNAAddrStr, vlanIfName,
+                     dhcpv6TypeStr](JsonRpcResponsePtr            response,
+                                    NXOSHttpClient::ResponseError responseError,
+                                    NXOSHttpClient::StatusCode    statusCode,
+                                    JsonRpcExceptionPtr           jsonRpcException) {
+                        handleRouteRemove(dhcpv6TypeStr, response, iaNAAddrStr,
+                                          vlanIfName, responseError, statusCode,
+                                          jsonRpcException);
                     });
             });
     } else if (std::holds_alternative<IA_PDInfoFuzzyRemove>(route.routeInfo)) {
@@ -523,9 +554,14 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
                     JsonRpcUtils::createRequestFromCommands(
                         1,
                         createRemoveRouteIpv6Command(srcIA_PDSubnetStr, dstIaNAAddrStr)),
-                    [this, dstIaNAAddrStr,
-                     srcIA_PDSubnetStr](JsonRpcResponsePtr response) {
-                        handleRouteRemove(response, srcIA_PDSubnetStr, dstIaNAAddrStr);
+                    [this, dstIaNAAddrStr, srcIA_PDSubnetStr,
+                     dhcpv6TypeStr](JsonRpcResponsePtr            response,
+                                    NXOSHttpClient::ResponseError responseError,
+                                    NXOSHttpClient::StatusCode    statusCode,
+                                    JsonRpcExceptionPtr           jsonRpcException) {
+                        handleRouteRemove(dhcpv6TypeStr, response, srcIA_PDSubnetStr,
+                                          dstIaNAAddrStr, responseError, statusCode,
+                                          jsonRpcException);
                     });
                 return;
             }
@@ -533,7 +569,8 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
         // fallback to switch lookup
         asyncLookupAddress(
             srcIA_PDSubnetStr, dhcpv6TypeStr,
-            [this, srcIA_PDSubnetStr](const RouteLookupResponse& response) {
+            [this, srcIA_PDSubnetStr,
+             dhcpv6TypeStr](const RouteLookupResponse& response) {
                 if (response.table_vrf.size() != 1) {
                     isc_throw(
                         isc::BadValue,
@@ -551,7 +588,7 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
                     // nothing we can remove
                     LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
                               DHCP6_EXPORTER_NXOS_RESPONSE_FAILED)
-                        .arg("IA_PD")
+                        .arg(dhcpv6TypeStr)
                         .arg(connectionName())
                         .arg(srcIA_PDSubnetStr);
                     return;
@@ -576,7 +613,7 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
                     LOG_DEBUG(
                         DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
                         DHCP6_EXPORTER_NXOS_RESPONSE_IA_TYPE_ADDR_MAPPING_TRACE_DATA)
-                        .arg("IA_PD")
+                        .arg(dhcpv6TypeStr)
                         .arg(connectionName())
                         .arg(srcIA_PDSubnetStr)
                         .arg(iaNAAddrStr);
@@ -588,9 +625,14 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
                         JsonRpcUtils::createRequestFromCommands(
                             1,
                             createRemoveRouteIpv6Command(srcIA_PDSubnetStr, iaNAAddrStr)),
-                        [this, iaNAAddrStr,
-                         srcIA_PDSubnetStr](JsonRpcResponsePtr response) {
-                            handleRouteRemove(response, srcIA_PDSubnetStr, iaNAAddrStr);
+                        [this, iaNAAddrStr, srcIA_PDSubnetStr,
+                         dhcpv6TypeStr](JsonRpcResponsePtr            response,
+                                        NXOSHttpClient::ResponseError responseError,
+                                        NXOSHttpClient::StatusCode    statusCode,
+                                        JsonRpcExceptionPtr           jsonRpcException) {
+                            handleRouteRemove(dhcpv6TypeStr, response, srcIA_PDSubnetStr,
+                                              iaNAAddrStr, responseError, statusCode,
+                                              jsonRpcException);
                         });
                 }
             });
@@ -611,31 +653,125 @@ void NXOSManagementClient::clientCloseHandler(int tcpNativeFd) {
     }
 }
 
-void NXOSManagementClient::handleRouteApply(JsonRpcResponsePtr response,
+void NXOSManagementClient::handleRouteApply(const string&      routeAddrTypeStr,
+                                            JsonRpcResponsePtr response,
                                             const string&      src,
-                                            const string&      dst) {
+                                            const string&      dst,
+                                            NXOSHttpClient::ResponseError responseError,
+                                            NXOSHttpClient::StatusCode    statusCode,
+                                            JsonRpcExceptionPtr jsonRpcException) {
     try {
-        isc_throw(isc::NotImplemented, "handleRouteApply not implemented");
+        if (responseError != NXOSHttpClient::ResponseError::SUCCESS) {
+            isc_throw(isc::Unexpected,
+                      ("error while sending response to the switch: {" +
+                       NXOSHttpClient::ResponseErrorToString(responseError) + "}"));
+        }
+        switch (statusCode) {
+            case 200: {
+                // command executed successfully
+            } break;
+            case 401: {
+                // unauthorized, maybe wrong credentials
+                if (jsonRpcException) {
+                    throw *jsonRpcException;
+                } else {
+                    isc_throw(isc::Unexpected, "unauthorized request");
+                }
+            } break;
+            case 500: {
+                // this status code server sends when command have no meaning
+                // (can't remove non-existent route). In most cases we can just ignore it
+            }
+            default: {
+                if (jsonRpcException) { throw *jsonRpcException; }
+            } break;
+        }
+        if (!response) { isc_throw(isc::Unexpected, "response must be not empty"); }
+        // we can fully ignore contents of the response
     } catch (const std::exception& ex) {
-        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-                  DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED)
+        LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED)
             .arg(connectionName())
+            .arg(routeAddrTypeStr)
             .arg(src)
             .arg(dst)
             .arg(ex.what());
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                  DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED_TRACE_DATA)
+            .arg(connectionName())
+            .arg(routeAddrTypeStr)
+            .arg(src)
+            .arg(dst)
+            .arg(ex.what())
+            .arg(NXOSHttpClient::ResponseErrorToString(responseError))
+            .arg(statusCode);
+        return;
     }
+    LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_SUCCESS)
+        .arg(connectionName())
+        .arg(routeAddrTypeStr)
+        .arg(src)
+        .arg(dst);
 }
 
-void NXOSManagementClient::handleRouteRemove(JsonRpcResponsePtr response,
+void NXOSManagementClient::handleRouteRemove(const string&      routeAddrTypeStr,
+                                             JsonRpcResponsePtr response,
                                              const string&      src,
-                                             const string&      dst) {
+                                             const string&      dst,
+                                             NXOSHttpClient::ResponseError responseError,
+                                             NXOSHttpClient::StatusCode    statusCode,
+                                             JsonRpcExceptionPtr jsonRpcException) {
     try {
-        isc_throw(isc::NotImplemented, "handleRouteRemove not implemented");
+        if (responseError != NXOSHttpClient::ResponseError::SUCCESS) {
+            isc_throw(isc::Unexpected,
+                      ("error while sending response to the switch: {" +
+                       NXOSHttpClient::ResponseErrorToString(responseError) + "}"));
+        }
+        switch (statusCode) {
+            case 200: {
+                // command executed successfully
+            } break;
+            case 401: {
+                // unauthorized, maybe wrong credentials
+                if (jsonRpcException) {
+                    throw *jsonRpcException;
+                } else {
+                    isc_throw(isc::Unexpected, "unauthorized request");
+                }
+            } break;
+            case 500: {
+                // this status code server sends when command have no meaning
+                // (can't remove non-existent route). In most cases we can just ignore it
+            }
+            default: {
+                if (jsonRpcException) { throw *jsonRpcException; }
+            } break;
+        }
+        if (!response) { isc_throw(isc::Unexpected, "response must be not empty"); }
+        // we can fully ignore contents of the response
+        // for remove route handler we can expect two response:
+        // 1. status of actual route removal
+        // 2. status of remove IPv6 ND entry from cache
     } catch (const std::exception& ex) {
-        LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED)
+        LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED)
             .arg(connectionName())
+            .arg(routeAddrTypeStr)
             .arg(src)
             .arg(dst)
             .arg(ex.what());
+        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                  DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED_TRACE_DATA)
+            .arg(connectionName())
+            .arg(routeAddrTypeStr)
+            .arg(src)
+            .arg(dst)
+            .arg(ex.what())
+            .arg(NXOSHttpClient::ResponseErrorToString(responseError))
+            .arg(statusCode);
+        return;
     }
+    LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_SUCCESS)
+        .arg(connectionName())
+        .arg(routeAddrTypeStr)
+        .arg(src)
+        .arg(dst);
 }

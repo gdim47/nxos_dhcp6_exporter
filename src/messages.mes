@@ -47,7 +47,11 @@
 % DHCP6_EXPORTER_LEASE6_RELEASE_ALLOCATION_INFO lease6_release allocation info: route_export: {%1}
 % DHCP6_EXPORTER_REMOVE_INFO_ON_DEVICE Remove route from switch{%1}: tid: {%2}, iaid: {%3}
 % DHCP6_EXPORTER_REMOVE_INFO_ON_DEVICE_ROUTE_EXPORT_DATA Remove route info from switch{%1}: route_export: {%2} 
-% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED Failed to remove route for switch{%1}: src: {%2}, dst: {%3}, reason: {%4}
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_SUCCESS Succesfully removed route on switch{%1}: route_type: {%2}, src_addr: {%3}, dst_addr: {%4}
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED Failed to remove route for switch{%1}: route_type: {%2}, src: {%3}, dst: {%4}, reason: {%5}
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_REMOVE_FAILED_TRACE_DATA Failed to remove route for switch{%1}: route_type: {%2}, src: {%3}, dst: {%4}, reason: {%5}, response_error: {%6}, response_status: {%7}
+
 % DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_MULTIPLE_LEASES_WARNING Multiple leases for DUID+IAID+IA_NA query detected while handling route removal for switch{%1}
 % DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_MULTIPLE_LEASES_DATA Multiple leases for type IA_NA in lease database for switch{%1}: route_export: {%2}
 % DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_FIND_IA_NA_LEASE_FAILED Can't find IA_NA pair for IA_PD lease release: iaid: {%2}, duid: {%3}
@@ -72,8 +76,9 @@
 
 % DHCP6_EXPORTER_NXOS_RESPONSE_FAILED Can't find mapping for %1 addr for switch{%2}: src_addr: {%3}
 
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_SUCCESS Succesfully apply route on switch{%1}: route_type: {%2}, src_addr: {%3}, dst_addr: {%4}
 % DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_TRACE_DATA Handle route applying for switch{%1}: src: {%2}, dst: {%3}
-
-% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED Failed to apply route for switch{%1}: src: {%2}, dst: {%3}, reason: %4
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED Failed to apply route for switch{%1}: src: {%2}, dst: {%3}, reason: {%4}
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED_TRACE_DATA Failed to apply route trace data for switch{%1}: route_type: {%2},src: {%3}, dst: {%4}, reason: {%5}, response_error: {%6}, response_status{%7} 
 
 % DHCP6_EXPORTER_LOG_RESPONSE Switch response raw: %1

@@ -144,6 +144,35 @@ static std::vector<JsonRpcResponse> validateResponse(const string& response) {
     return JsonRpcUtils::handleResponse(response);
 }
 
+static inline NXOSHttpClient::StatusCode
+    HttplibStatusCodeToNXOSHttpClientMapper(httplib::StatusCode status) {
+    return status;
+}
+
+static inline NXOSHttpClient::ResponseError
+    HttplibErrorToNXOSHttpClientMapper(httplib::Error error) {
+    switch (error) {
+        case httplib::Error::Success: return NXOSHttpClient::SUCCESS;
+        case httplib::Error::Connection: return NXOSHttpClient::CONNECTION;
+        case httplib::Error::BindIPAddress: return NXOSHttpClient::BINDIPADDRESS;
+        case httplib::Error::Read: return NXOSHttpClient::READ;
+        case httplib::Error::Write: return NXOSHttpClient::WRITE;
+        case httplib::Error::ExceedRedirectCount:
+            return NXOSHttpClient::EXCEED_REDIRECT_COUNT;
+        case httplib::Error::Canceled: return NXOSHttpClient::CANCELED;
+        case httplib::Error::SSLConnection: return NXOSHttpClient::SSL_CONNECTION;
+        case httplib::Error::SSLLoadingCerts: return NXOSHttpClient::SSL_LOADING_CERTS;
+        case httplib::Error::SSLServerVerification:
+            return NXOSHttpClient::SSL_SERVER_VERIFICATION;
+        case httplib::Error::UnsupportedMultipartBoundaryChars:
+            return NXOSHttpClient::UNSUPPORTED_MULTIPART_BOUNDARY_CHARS;
+        case httplib::Error::Compression: return NXOSHttpClient::COMPRESSION;
+        case httplib::Error::ConnectionTimeout: return NXOSHttpClient::CONNECTION_TIMEOUT;
+        case httplib::Error::ProxyConnection: return NXOSHttpClient::PROXY_CONNECTION;
+        default: return NXOSHttpClient::Unknown;
+    }
+}
+
 void NXOSHttpClientImpl::sendRequest(
     const Url&                              url,
     const string&                           endpointName,
@@ -151,61 +180,70 @@ void NXOSHttpClientImpl::sendRequest(
     ConstElementPtr                         requestBody,
     NXOSHttpClient::ResponseHandlerCallback responseHandler,
     int                                     timeout) {
-    m_ioService->post(
-        [this, responseHandler, url, tlsContext, timeout, endpointName, requestBody] {
-            const auto& connectionName{url.toText()};
-            bool        isHttpsScheme{url.getScheme() == Url::Scheme::HTTPS};
-            if (isHttpsScheme) {
-                if (!tlsContext) {
-                    isc_throw(isc::NotImplemented,
-                              "https tls context not implemented for requests");
+    m_ioService->post([this, responseHandler, url, tlsContext, timeout, endpointName,
+                       requestBody] {
+        const auto& connectionName{url.toText()};
+        bool        isHttpsScheme{url.getScheme() == Url::Scheme::HTTPS};
+        if (isHttpsScheme) {
+            if (!tlsContext) {
+                isc_throw(isc::NotImplemented,
+                          "https tls context not implemented for requests");
+            }
+        } else {
+            Client cli(url.getStrippedHostname(), url.getPort());
+            cli.set_connection_timeout(timeout);
+            if (m_basicAuth) {
+                const string& secret{m_basicAuth->getSecret()};
+                // Extract the password part (substring from the position after the
+                // colon to the end)
+                auto pos{secret.find(':')};
+                if (pos != string::npos) {
+                    string login    = secret.substr(0, pos);
+                    string password = secret.substr(pos + 1);
+                    cli.set_basic_auth(login, password);
                 }
+            }
+
+            std::vector<JsonRpcResponse>  jsonRpcResponseRaw;
+            NXOSHttpClient::ResponseError responseError{
+                NXOSHttpClient::ResponseError::SUCCESS};
+            NXOSHttpClient::StatusCode responseStatusCode{200};
+            JsonRpcExceptionPtr        jsonRpcException;
+
+            auto response{
+                cli.Post(endpointName, requestBody->str(), "application/json-rpc")};
+            if (!response) {
+                LOG_ERROR(DHCP6ExporterLogger,
+                          DHCP6_EXPORTER_UPDATE_INFO_COMMUNICATION_FAILED)
+                    .arg(connectionName)
+                    .arg(httplib::to_string(response.error()));
+                responseError = HttplibErrorToNXOSHttpClientMapper(response.error());
             } else {
-                Client cli(url.getStrippedHostname(), url.getPort());
-                cli.set_connection_timeout(timeout);
-                if (m_basicAuth) {
-                    const string& secret{m_basicAuth->getSecret()};
-                    // Extract the password part (substring from the position after the
-                    // colon to the end)
-                    auto pos{secret.find(':')};
-                    if (pos != string::npos) {
-                        string login    = secret.substr(0, pos);
-                        string password = secret.substr(pos + 1);
-                        cli.set_basic_auth(login, password);
-                    }
-                }
-
-                auto response{
-                    cli.Post(endpointName, requestBody->str(), "application/json-rpc")};
-                if (!response) {
-                    LOG_ERROR(DHCP6ExporterLogger,
-                              DHCP6_EXPORTER_UPDATE_INFO_COMMUNICATION_FAILED)
-                        .arg(connectionName)
-                        .arg(httplib::to_string(response.error()));
-                    return;
-                }
-
-                auto                         status       = response->status;
-                auto                         responseBody = response->body;
-                std::vector<JsonRpcResponse> jsonRpcResponseRaw;
+                responseStatusCode = HttplibStatusCodeToNXOSHttpClientMapper(
+                    static_cast<httplib::StatusCode>(response->status));
+                string responseBody = response->body;
                 try {
                     LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
                               DHCP6_EXPORTER_LOG_RESPONSE)
                         .arg(responseBody);
 
                     jsonRpcResponseRaw = validateResponse(responseBody);
-                } catch (const std::exception& ex) {
+                } catch (const JsonRpcException& ex) {
                     LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_JSON_RPC_VALIDATE_ERROR)
                         .arg(connectionName)
                         .arg(ex.what());
-                    return;
-                }
-                if (responseHandler) {
-                    responseHandler(boost::make_shared<std::vector<JsonRpcResponse>>(
-                        std::move(jsonRpcResponseRaw)));
+                    // give exception object back to response handler
+                    jsonRpcException = boost::make_shared<JsonRpcException>(ex);
                 }
             }
-        });
+run_handler:
+            if (responseHandler) {
+                responseHandler(boost::make_shared<std::vector<JsonRpcResponse>>(
+                                    std::move(jsonRpcResponseRaw)),
+                                responseError, responseStatusCode, jsonRpcException);
+            }
+        }
+    });
 }
 
 void NXOSHttpClientImpl::setBasicAuth(const BasicHttpAuthPtr& auth) {
@@ -230,4 +268,10 @@ void NXOSHttpClient::sendRequest(const Url&                              url,
                                  NXOSHttpClient::ResponseHandlerCallback responseHandler,
                                  int                                     timeout) {
     m_impl->sendRequest(url, uri, tlsContext, requestBody, responseHandler, timeout);
+}
+
+string NXOSHttpClient::ResponseErrorToString(NXOSHttpClient::ResponseError error) {
+    // in case of changes in httplib errors, change this function
+    httplib::Error httplibError{static_cast<httplib::Error>(error)};
+    return httplib::to_string(httplibError);
 }
