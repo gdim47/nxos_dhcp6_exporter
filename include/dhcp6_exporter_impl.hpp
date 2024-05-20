@@ -12,7 +12,7 @@ class DHCP6ExporterImpl {
     DHCP6ExporterImpl(const DHCP6ExporterImpl&)            = delete;
     DHCP6ExporterImpl& operator=(const DHCP6ExporterImpl&) = delete;
 
-    bool configureAndInitClient(LibraryHandle& handle);
+    void configureAndInitClient(LibraryHandle& handle);
 
     void startService(const IOServicePtr& io_service);
 

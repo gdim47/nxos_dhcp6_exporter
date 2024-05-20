@@ -13,11 +13,8 @@
 #include <dhcpsrv/lease_mgr.h>
 #include <dhcpsrv/lease_mgr_factory.h>
 #include <exceptions/exceptions.h>
-#include <future>
 #include <http/basic_auth.h>
 #include <http/client.h>
-#include <http/post_request_json.h>
-#include <http/response_json.h>
 #include <httplib.h>
 #include <regex>
 
@@ -28,17 +25,6 @@ using isc::dhcp::LeaseMgrFactory;
 using isc::http::BasicHttpAuth;
 using isc::http::BasicHttpAuthPtr;
 
-/*
-static JsonRpcResponse validateResponse(const string& response) {
-    if (response.empty()) { isc_throw(isc::BadValue, "no body found in the response"); }
-
-    return JsonRpcUtils::handleResponse(response);
-}
-*/
-
-#define FIELD_ERROR_STR(field_name, what) \
-    "Field \"" field_name "\" in \"connection-params\" " what
-
 static const std::regex VlanIfRegex("(vlan)(\\d+)",
                                     std::regex_constants::icase |
                                         std::regex_constants::ECMAScript);
@@ -47,99 +33,8 @@ static inline bool isValidVlanName(const string& ifName) {
     return std::regex_match(ifName, VlanIfRegex);
 }
 
-static NXOSConnectionConfigParams parseConfig(ConstElementPtr& mgmtConnParams) {
-    if (!mgmtConnParams) {
-        isc_throw(isc::ConfigError, "NXOS DHCP6 Exporter configuration must not be null");
-    }
-
-    ConstElementPtr hostElement{mgmtConnParams->find("host")};
-    if (!hostElement) {
-        isc_throw(isc::ConfigError, FIELD_ERROR_STR("host", "must not be null"));
-    }
-
-    if (hostElement->getType() != Element::string) {
-        isc_throw(isc::ConfigError, FIELD_ERROR_STR("host", "must be a string"));
-    }
-
-    auto hostStr{hostElement->stringValue()};
-    Url  url(hostStr);
-    if (!url.isValid()) {
-        isc_throw(isc::ConfigError,
-                  string(FIELD_ERROR_STR("host", "must be a valid URL")) + ": " +
-                      url.getErrorMessage());
-    }
-    NXOSConnectionInfo connInfo{std::move(url)};
-
-    auto credentialsParamsElement{mgmtConnParams->find("credentials")};
-    if (!credentialsParamsElement) {
-        isc_throw(isc::ConfigError, FIELD_ERROR_STR("credentials", "must not be null"));
-    }
-
-    if (credentialsParamsElement->getType() != Element::map) {
-        isc_throw(isc::ConfigError, FIELD_ERROR_STR("credentials", "must be a map"));
-    }
-    auto credentialsParams{credentialsParamsElement->mapValue()};
-
-    auto credentialsLoginElementIt{credentialsParams.find("login")};
-    if (credentialsLoginElementIt == credentialsParams.end()) {
-        isc_throw(isc::ConfigError, FIELD_ERROR_STR("login", "must not be null"));
-    }
-    auto credentialsLoginElement{credentialsLoginElementIt->second};
-    if (credentialsLoginElement->getType() != Element::string) {
-        isc_throw(isc::ConfigError, FIELD_ERROR_STR("login", "must be a string"));
-    }
-    // TODO: fix to use files instead plaintext inside config
-    auto login{credentialsLoginElement->stringValue()};
-
-    auto credentialsPasswordElementIt{credentialsParams.find("password")};
-    if (credentialsPasswordElementIt == credentialsParams.end()) {
-        isc_throw(isc::ConfigError, FIELD_ERROR_STR("password", "must not be null"));
-    }
-    auto credentialsPasswordElement{credentialsPasswordElementIt->second};
-    if (credentialsPasswordElement->getType() != Element::string) {
-        isc_throw(isc::ConfigError, FIELD_ERROR_STR("password", "must be a string"));
-    }
-    // TODO: fix to use files instead plaintext inside config
-    auto password{credentialsPasswordElement->stringValue()};
-
-    auto auth{boost::make_shared<BasicHttpAuth>(login, password)};
-
-    std::optional<string> cert_file;
-    std::optional<string> key_file;
-
-    if (url.getScheme() == isc::http::Url::HTTPS) {
-        auto credentialsCertificateElementIt{credentialsParams.find("certificate")};
-        if (credentialsCertificateElementIt == credentialsParams.end()) {
-            isc_throw(isc::ConfigError,
-                      FIELD_ERROR_STR("certificate", "must not be null"));
-        }
-        auto credentialsCertificateElement{credentialsCertificateElementIt->second};
-        if (credentialsCertificateElement->getType() != Element::string) {
-            isc_throw(isc::ConfigError,
-                      FIELD_ERROR_STR("certificate", "must be a string"));
-        }
-
-        // TODO: check file for cert
-
-        auto credentialsKeyfileElementIt{credentialsParams.find("keyfile")};
-        if (credentialsKeyfileElementIt == credentialsParams.end()) {
-            isc_throw(isc::ConfigError, FIELD_ERROR_STR("keyfile", "must not be null"));
-        }
-        auto credentialsKeyfileElement{credentialsCertificateElementIt->second};
-        if (credentialsKeyfileElement->getType() != Element::string) {
-            isc_throw(isc::ConfigError, FIELD_ERROR_STR("keyfile", "must be a string"));
-        }
-
-        // TODO: check file for keyfile
-    }
-    return {std::move(connInfo),
-            {std::move(auth)},
-            std::move(cert_file),
-            std::move(key_file)};
-}
-
 NXOSManagementClient::NXOSManagementClient(ConstElementPtr mgmtConnParams) :
-    m_params(parseConfig(mgmtConnParams)) {}
+    m_params(NXOSConnectionConfigParams::parseConfig(mgmtConnParams)) {}
 
 void NXOSManagementClient::startClient(IOService& io_service) {
     if (m_params.connInfo.url.getScheme() == isc::http::Url::HTTPS) {
@@ -156,7 +51,7 @@ string NXOSManagementClient::connectionName() const {
     return m_params.connInfo.url.toText();
 }
 
-const string EndpointName{"/ins"};
+static const string EndpointName{"/ins"};
 
 using namespace NXOSResponse;
 
@@ -686,7 +581,9 @@ void NXOSManagementClient::handleRouteApply(const string&      routeAddrTypeStr,
                 if (jsonRpcException) { throw *jsonRpcException; }
             } break;
         }
-        if (!response) { isc_throw(isc::Unexpected, "response must be not empty"); }
+        if (!response || (response && response->empty())) {
+            isc_throw(isc::Unexpected, "response must be not empty");
+        }
         // we can fully ignore contents of the response
     } catch (const std::exception& ex) {
         LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED)
@@ -746,7 +643,9 @@ void NXOSManagementClient::handleRouteRemove(const string&      routeAddrTypeStr
                 if (jsonRpcException) { throw *jsonRpcException; }
             } break;
         }
-        if (!response) { isc_throw(isc::Unexpected, "response must be not empty"); }
+        if (!response || (response && response->empty())) {
+            isc_throw(isc::Unexpected, "response must be not empty");
+        }
         // we can fully ignore contents of the response
         // for remove route handler we can expect two response:
         // 1. status of actual route removal

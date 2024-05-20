@@ -10,7 +10,8 @@ DHCP6ExporterService::DHCP6ExporterService(ConstElementPtr mgmtConnType,
         isc_throw(isc::Unexpected, "No value for connection type");
     }
 
-    m_client = ManagementClient::init(mgmtName, mgmtConnParams);
+    m_client           = ManagementClient::init(mgmtName, mgmtConnParams);
+    m_heartbeatService = HeartbeatService::init(mgmtName, mgmtConnParams);
 }
 
 void DHCP6ExporterService::setIOService(const IOServicePtr& io_service) {
@@ -23,9 +24,14 @@ void DHCP6ExporterService::startService() {
     // start ManagementClient for current `connection-type`
     m_client->startClient(*m_ioService);
     // TODO: start HeartbeatClient
+    m_heartbeatService->setConnectionRestoredHandler([] {});
+    m_heartbeatService->startService(*m_ioService);
 }
 
-void DHCP6ExporterService::stopService() { m_client->stopClient(); }
+void DHCP6ExporterService::stopService() {
+    m_client->stopClient();
+    m_heartbeatService->stopService();
+}
 
 void DHCP6ExporterService::exportRoute(const RouteExport& route) {
     LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_UPDATE_INFO_ON_DEVICE)

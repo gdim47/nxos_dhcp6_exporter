@@ -286,4 +286,24 @@ namespace NXOSResponse {
         j.at("TABLE_intf").get_to(row.table_intf);
     }
 
+    struct UptimeResponse {
+        int32_t kern_uptm_days;
+        int32_t kern_uptm_hrs;
+        int32_t kern_uptm_mins;
+        int32_t kern_uptm_secs;
+    };
+
+    inline void to_json(json& j, const UptimeResponse& row) {
+        j = json{{"kern_uptm_days", row.kern_uptm_days},
+                 {"kern_uptm_hrs", row.kern_uptm_hrs},
+                 {"kern_uptm_mins", row.kern_uptm_mins},
+                 {"kern_uptm_secs", row.kern_uptm_secs}};
+    }
+
+    inline void from_json(const json& j, UptimeResponse& row) {
+        j.at("kern_uptm_days").get_to(row.kern_uptm_days);
+        j.at("kern_uptm_hrs").get_to(row.kern_uptm_hrs);
+        j.at("kern_uptm_mins").get_to(row.kern_uptm_mins);
+        j.at("kern_uptm_secs").get_to(row.kern_uptm_secs);
+    }
 }    // namespace NXOSResponse

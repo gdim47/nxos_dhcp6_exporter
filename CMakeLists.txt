@@ -87,7 +87,7 @@ add_library(nxos_dhcp6_exporter SHARED)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/include/version.hpp.in" "version.hpp")
 
 set_target_properties(nxos_dhcp6_exporter PROPERTIES
-    CXX_STANDARD 20
+    CXX_STANDARD 17 
     CXX_EXTENSIONS OFF
     CXX_STANDARD_REQUIRED ON
 )
@@ -99,9 +99,12 @@ target_sources(nxos_dhcp6_exporter PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/dhcp6_exporter_impl.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/dhcp6_exporter_service.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/management_client.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/heartbeat_service.cpp"
     # management clients
     "${CMAKE_CURRENT_SOURCE_DIR}/src/nxos_management_client.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/nxos_connection_params.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/nxos_http_client.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/nxos_heartbeat_service.cpp"
     # json-rpc support
     "${CMAKE_CURRENT_SOURCE_DIR}/src/jsonrpc/utils.cpp"
     # logger messages

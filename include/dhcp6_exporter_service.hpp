@@ -1,5 +1,6 @@
 #pragma once
 #include "common.hpp"
+#include "heartbeat_service.hpp"
 #include "management_client.hpp"
 #include "route_export.hpp"
 
@@ -16,7 +17,7 @@ class DHCP6ExporterService {
     IOServicePtr getIOService();
 
     void startService();
-    
+
     void stopService();
 
     void exportRoute(const RouteExport& route);
@@ -26,4 +27,5 @@ class DHCP6ExporterService {
   private:
     IOServicePtr        m_ioService;
     ManagementClientPtr m_client;
+    HeartbeatServicePtr m_heartbeatService;
 };

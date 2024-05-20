@@ -79,6 +79,11 @@
 % DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_SUCCESS Succesfully apply route on switch{%1}: route_type: {%2}, src_addr: {%3}, dst_addr: {%4}
 % DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_TRACE_DATA Handle route applying for switch{%1}: src: {%2}, dst: {%3}
 % DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED Failed to apply route for switch{%1}: src: {%2}, dst: {%3}, reason: {%4}
-% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED_TRACE_DATA Failed to apply route trace data for switch{%1}: route_type: {%2},src: {%3}, dst: {%4}, reason: {%5}, response_error: {%6}, response_status{%7} 
+% DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED_TRACE_DATA Failed to apply route trace data for switch{%1}: route_type: {%2}, src: {%3}, dst: {%4}, reason: {%5}, response_error: {%6}, response_status{%7} 
 
 % DHCP6_EXPORTER_LOG_RESPONSE Switch response raw: %1
+
+% DHCP6_EXPORTER_NXOS_HEARTBEAT_INVALID_STATUS_CODE Failed to receive response from switch{%1}: response_error: {%2}, response_status: {%3} 
+% DHCP6_EXPORTER_NXOS_HEARTBEAT_RESPONSE_FAILED Failed to read response from switch{%1}: reason: {%2}
+% DHCP6_EXPORTER_NXOS_HEARTBEAT_FAILED Failed to receive heartbeat from switch{%1}
+% DHCP6_EXPORTER_NXOS_HEARTBEAT_RESTORED_CONNECTION Run callback after restored connection with switch{%1}
