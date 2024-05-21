@@ -41,4 +41,5 @@ class NXOSHeartbeatService : public HeartbeatService {
                                               NXOSResponse::UptimeResponse& into);
 
     void heartbeatLoop();
+    void handlerFailedCallback();
 };

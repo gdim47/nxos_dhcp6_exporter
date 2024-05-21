@@ -72,42 +72,6 @@ EXPORTED int dhcp6_srv_configured(CalloutHandle& handle) {
 
     return 0;
 }
-/*
-EXPORTED int pkt6_receive(CalloutHandle& handle) {
-    Pkt6Ptr query;
-    try {
-        handle.getArgument("query6", query);
-
-        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_PKT6_RECEIVE)
-            .arg(query->toText());
-    } catch (const std::exception& ex) {
-        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
-                  DHCP6_EXPORTER_PKT6_RECEIVE_FAILED);
-    }
-
-    return 0;
-}
-
-EXPORTED int pkt6_send(CalloutHandle& handle) {
-    Pkt6Ptr query;
-    Pkt6Ptr response;
-
-    try {
-        handle.getArgument("query6", query);
-        handle.getArgument("response6", response);
-
-        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL, DHCP6_EXPORTER_PKT6_SEND)
-            .arg(query->toText())
-            .arg(response->toText());
-    } catch (const std::exception& ex) {
-        LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
-                  DHCP6_EXPORTER_PKT6_SEND_FAILED)
-            .arg(ex.what());
-    }
-
-    return 0;
-}
-*/
 
 EXPORTED int subnet6_select(CalloutHandle& handle) {
     Pkt6Ptr                       query;
@@ -194,6 +158,4 @@ EXPORTED int lease6_expire(CalloutHandle& handle) {
     }
     return 0;
 }
-
-EXPORTED int lease6_recover(CalloutHandle& handle) { return 0; }
 }

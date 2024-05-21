@@ -81,9 +81,16 @@
 % DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED Failed to apply route for switch{%1}: src: {%2}, dst: {%3}, reason: {%4}
 % DHCP6_EXPORTER_NXOS_RESPONSE_ROUTE_APPLY_FAILED_TRACE_DATA Failed to apply route trace data for switch{%1}: route_type: {%2}, src: {%3}, dst: {%4}, reason: {%5}, response_error: {%6}, response_status{%7} 
 
+% DHCP6_EXPORTER_NXOS_ROUTE_REINIT_IA_NA_LEASE_FAILED Can't find IA_NA pair for IA_PD lease on switch{%1}: iaid: {%2}, duid: {%3}, ia_pd addr: {%4}. Skip that IA_PD lease
+% DHCP6_EXPORTER_NXOS_ROUTE_REINIT_NO_HWADDR_FAILED Failed to recover route because lease does not have HWAddr(mac-address) of client for switch{%1}: lease_type: {%2}, lease_iaid: {%3}, lease_duid: {%4}, addr: {%5} 
+% DHCP6_EXPORTER_NXOS_ROUTE_CHECK_HWADDR Checking VLAN id for HWAddr from switch{%1}: hwaddr: {%2}
+
 % DHCP6_EXPORTER_LOG_RESPONSE Switch response raw: %1
 
 % DHCP6_EXPORTER_NXOS_HEARTBEAT_INVALID_STATUS_CODE Failed to receive response from switch{%1}: response_error: {%2}, response_status: {%3} 
 % DHCP6_EXPORTER_NXOS_HEARTBEAT_RESPONSE_FAILED Failed to read response from switch{%1}: reason: {%2}
 % DHCP6_EXPORTER_NXOS_HEARTBEAT_FAILED Failed to receive heartbeat from switch{%1}
 % DHCP6_EXPORTER_NXOS_HEARTBEAT_RESTORED_CONNECTION Run callback after restored connection with switch{%1}
+
+% DHCP6_EXPORTER_NXOS_RESPONSE_NEIGHBOR_LOOKUP_RECEIVED Received neighbor lookup from switch{%1}
+% DHCP6_EXPORTER_NXOS_RESPONSE_NEIGHBOR_LOOKUP_RECEIVED_TRACE_DATA Received address lookup trace from switch{%1}: neigbor_data: {%2}

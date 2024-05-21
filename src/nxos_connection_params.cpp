@@ -34,6 +34,21 @@ NXOSConnectionConfigParams
     }
     NXOSConnectionInfo connInfo{std::move(url)};
 
+    size_t intervalTimer{5};
+    auto   heartbeatIntervalElement{mgmtConnParams->find("heartbeat-interval")};
+    if (heartbeatIntervalElement) {
+        if (heartbeatIntervalElement->getType() != Element::integer) {
+            isc_throw(isc::ConfigError,
+                      FIELD_ERROR_STR("heartbeat-interval", "must be a integer"));
+        }
+    }
+    intervalTimer = heartbeatIntervalElement->intValue();
+    if (intervalTimer <= 0) {
+        isc_throw(isc::ConfigError,
+                  FIELD_ERROR_STR("heartbeat-interval",
+                                  "must be a non-zero non-negative integer"));
+    }
+
     auto credentialsParamsElement{mgmtConnParams->find("credentials")};
     if (!credentialsParamsElement) {
         isc_throw(isc::ConfigError, FIELD_ERROR_STR("credentials", "must not be null"));
@@ -99,5 +114,6 @@ NXOSConnectionConfigParams
     return {std::move(connInfo),
             {std::move(auth)},
             std::move(cert_file),
-            std::move(key_file)};
+            std::move(key_file),
+            intervalTimer};
 }

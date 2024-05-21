@@ -28,4 +28,8 @@ class DHCP6ExporterService {
     IOServicePtr        m_ioService;
     ManagementClientPtr m_client;
     HeartbeatServicePtr m_heartbeatService;
+
+  private:
+    void restoreLeasesFromLeaseDatabase(
+        HeartbeatService::HandlerFailedCallback handlerFailed);
 };

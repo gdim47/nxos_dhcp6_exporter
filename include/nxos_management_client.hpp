@@ -37,8 +37,11 @@ class NXOSManagementClient : public ManagementClient {
 
     void removeRoutesFromSwitch(const RouteExport& route) override;
 
+    void asyncGetHWAddrToInterfaceNameMapping(
+        const HWAddrMappingHandler& handler) override;
+
   private:
-    using AddressLookupHandler =
+    using AddressLookupHandlerInternal =
         std::function<void(const NXOSResponse::RouteLookupResponse&)>;
 
   private:
@@ -51,9 +54,9 @@ class NXOSManagementClient : public ManagementClient {
 
     void clientCloseHandler(int tcpNativeFd);
 
-    void asyncLookupAddress(const string&               lookupAddrStr,
-                            const string&               lookupAddrType,
-                            const AddressLookupHandler& responseHandler);
+    void asyncLookupAddressInternal(const string&                       lookupAddrStr,
+                                    const string&                       lookupAddrType,
+                                    const AddressLookupHandlerInternal& responseHandler);
 
     void handleRouteApply(const string&                 routeAddrTypeStr,
                           JsonRpcResponsePtr            response,

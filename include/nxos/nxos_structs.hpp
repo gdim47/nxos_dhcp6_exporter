@@ -306,4 +306,169 @@ namespace NXOSResponse {
         j.at("kern_uptm_mins").get_to(row.kern_uptm_mins);
         j.at("kern_uptm_secs").get_to(row.kern_uptm_secs);
     }
+
+    struct AdjObject {
+        string intf_out;
+        string ipv6_addr;
+        string mac;
+    };
+
+    inline void to_json(json& j, const AdjObject& row) {
+        j = json{
+            {"intf-out", row.intf_out}, {"ipv6-addr", row.ipv6_addr}, {"mac", row.mac}};
+    }
+
+    inline void from_json(const json& j, AdjObject& row) {
+        j.at("intf-out").get_to(row.intf_out);
+        j.at("ipv6-addr").get_to(row.ipv6_addr);
+        j.at("mac").get_to(row.mac);
+    }
+
+    struct RowAdj {
+        std::vector<AdjObject> table_object;
+    };
+
+    inline void to_json(json& j, const RowAdj& row) {
+        json inner;
+        auto size{row.table_object.size()};
+        switch (size) {
+            case 0: break;    // don't put empty `ROW_prefix`
+            case 1: {
+                inner["ROW_adj"] = row.table_object[0];
+            } break;
+            default: {
+                inner["ROW_adj"] = row.table_object;
+            } break;
+        }
+        j = inner;
+    }
+
+    inline void from_json(const json& j, RowAdj& row) {
+        std::vector<AdjObject> data;
+        json                   inner;
+        j.at("ROW_adj").get_to(inner);
+        if (inner.contains("ROW_adj")) {
+            auto tableObject{inner.at("ROW_adj")};
+            if (tableObject.is_object()) {
+                // single item inside `ROW_adj`
+                data.resize(1);
+                tableObject.get_to(data[0]);
+                row.table_object = std::move(data);
+            } else if (tableObject.is_array()) {
+                tableObject.get_to(data);
+                row.table_object = std::move(data);
+            }
+        }
+    }
+
+    struct RowAfi {
+        string              afi;
+        std::vector<RowAdj> table_adj;
+    };
+    inline void to_json(json& j, const RowAfi& row) {
+        json inner{};
+        inner = json{{"afi", row.afi}};
+
+        auto size{row.table_adj.size()};
+        switch (size) {
+            case 0: break;    // don't put empty `TABLE_afi`
+            case 1: {
+                inner["TABLE_adj"] = row.table_adj[0];
+            } break;
+            default: {
+                inner["TABLE_adj"] = row.table_adj;
+            } break;
+        }
+        j = json{{"ROW_afi", inner}};
+    }
+
+    inline void from_json(const json& j, RowAfi& row) {
+        std::vector<RowAdj> data;
+        json                inner;
+        j.at("ROW_afi").get_to(inner);
+        inner.at("afi").get_to(row.afi);
+        if (inner.contains("TABLE_adj")) {
+            auto tableAdj{inner.at("TABLE_adj")};
+            if (tableAdj.is_object()) {
+                // single item inside `TABLE_afi`
+                data.resize(1);
+                tableAdj.get_to(data[0]);
+                row.table_adj = std::move(data);
+            } else if (tableAdj.is_array()) {
+                tableAdj.get_to(data);
+                row.table_adj = std::move(data);
+            }
+        }
+    }
+
+    struct RowVrfNeighborLookup {
+        string              vrf_name_out;
+        std::vector<RowAfi> table_afi;
+    };
+
+    inline void to_json(json& j, const RowVrfNeighborLookup& row) {
+        json inner;
+        inner = json{{"vrf-name-out", row.vrf_name_out}};
+
+        auto size{row.table_afi.size()};
+        switch (size) {
+            case 0: break;    // don't put empty `TABLE_afi`
+            case 1: {
+                inner["TABLE_afi"] = row.table_afi[0];
+            } break;
+            default: {
+                inner["TABLE_afi"] = row.table_afi;
+            } break;
+        }
+        j = json{{"ROW_vrf", inner}};
+    }
+
+    inline void from_json(const json& j, RowVrfNeighborLookup& row) {
+        std::vector<RowAfi> data;
+        json                inner;
+        j.at("ROW_vrf").get_to(inner);
+        inner.at("vrf-name-out").get_to(row.vrf_name_out);
+        if (inner.contains("TABLE_afi")) {
+            auto tableAfi{inner.at("TABLE_afi")};
+            if (tableAfi.is_object()) {
+                // single item inside `TABLE_afi`
+                data.resize(1);
+                tableAfi.get_to(data[0]);
+                row.table_afi = std::move(data);
+            } else if (tableAfi.is_array()) {
+                tableAfi.get_to(data);
+                row.table_afi = std::move(data);
+            }
+        }
+    }
+
+    struct NeighborLookupResponse {
+        std::vector<RowVrfNeighborLookup> table_vrf;
+
+        static const char* name() noexcept { return "NeighborLookupResponse"; }
+    };
+
+    inline void to_json(json& j, const NeighborLookupResponse& row) {
+        json inner;
+        switch (row.table_vrf.size()) {
+            case 0: break;
+            case 1: {
+                inner = row.table_vrf[0];
+            } break;
+            default: {
+                inner = row.table_vrf;
+            } break;
+        }
+        j = json{{"TABLE_vrf", inner}};
+    }
+
+    inline void from_json(const json& j, NeighborLookupResponse& row) {
+        const auto& tableVrfJson{j.at("TABLE_vrf")};
+        if (tableVrfJson.is_array()) {
+            j.at("TABLE_vrf").get_to(row.table_vrf);
+        } else if (tableVrfJson.is_object()) {
+            row.table_vrf.resize(1);
+            j.at("TABLE_vrf").get_to(row.table_vrf[0]);
+        }
+    }
 }    // namespace NXOSResponse

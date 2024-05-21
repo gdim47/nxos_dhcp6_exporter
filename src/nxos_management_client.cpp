@@ -1,4 +1,5 @@
 #include "nxos_management_client.hpp"
+#include "dhcp/hwaddr.h"
 #include "jsonrpc/utils.hpp"
 #include "lease_utils.hpp"
 #include "log.hpp"
@@ -67,6 +68,8 @@ static string createMappingVlanAddrToVlanIdCommand(const string& vlanAddr) {
     return Ipv6RouteVlanAddrCommandPrefix + vlanAddr;
 }
 
+static string createShowIPv6NeighbourCommand() { return "show ipv6 neighbor"; }
+
 void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
     auto dhcpv6TypeStr{route.toDHCPv6IATypeString()};
     if (std::holds_alternative<IA_NAInfo>(route.routeInfo)) {
@@ -79,7 +82,7 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
         // from link-addr to vlan id
 
         string linkAddrType{"RELAY_ADDRESS"};
-        asyncLookupAddress(
+        asyncLookupAddressInternal(
             linkAddrStr, linkAddrType,
             [this, iaNAAddrStr, linkAddrStr,
              dhcpv6TypeStr](const RouteLookupResponse& routeLookup) {
@@ -155,6 +158,22 @@ void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
                                          responseError, statusCode, jsonRpcException);
                     });
             });
+    } else if (std::holds_alternative<IA_NAFast>(route.routeInfo)) {
+        const auto& iaNAInfo{std::get<IA_NAFast>(route.routeInfo)};
+        string      vlanIfName{iaNAInfo.srcVlanIfName};
+        string      iaNAAddrStr{iaNAInfo.ia_naAddr.toText() + "/128"};
+        // we have all required info, just send route
+        m_httpClient->sendRequest(
+            m_params.connInfo.url, EndpointName, {},    // TODO: correct handle tls
+            JsonRpcUtils::createRequestFromCommands(
+                1, createApplyRouteIpv6Command(iaNAAddrStr, vlanIfName)),
+            [this, iaNAAddrStr, vlanIfName, dhcpv6TypeStr](
+                JsonRpcResponsePtr response, NXOSHttpClient::ResponseError responseError,
+                NXOSHttpClient::StatusCode statusCode,
+                JsonRpcExceptionPtr        jsonRpcException) {
+                handleRouteApply(dhcpv6TypeStr, response, iaNAAddrStr, vlanIfName,
+                                 responseError, statusCode, jsonRpcException);
+            });
     } else if (std::holds_alternative<IA_PDInfo>(route.routeInfo)) {
         const auto& iaPDInfo{std::get<IA_PDInfo>(route.routeInfo)};
         string      srcIA_PDSubnetStr{iaPDInfo.ia_pdPrefix.toText() + "/" +
@@ -190,10 +209,49 @@ static string createRemoveNDCacheEntryIpv6Command(const string& vlanIfName) {
     return Ipv6RemoveNDCacheEntryPrefix + vlanIfName + ForceDeleteSuffix;
 }
 
-void NXOSManagementClient::asyncLookupAddress(
-    const string&               lookupAddrStr,
-    const string&               lookupAddrType,
-    const AddressLookupHandler& responseHandler) {
+// void NXOSManagementClient::asyncGetVLANMappings(const std::vector<IOAddress>&
+// vlanAddrs,
+//                                                 const VLANMappingHandler&     handler)
+//                                                 {
+//     VLANAddrToVLANIDMap map;
+//     std::mutex          mutexMap;
+//     for (auto addr : vlanAddrs) {
+//         if (map.count(addr) == 1) { continue; }
+//         asyncLookupAddressInternal(
+//             addr.toText(), "RELAY_ADDRESS",
+//             [&mutexMap, &map, addr](const NXOSResponse::RouteLookupResponse& response)
+//             {
+//                 if (response.table_vrf.size() != 1) { return; }
+//                 const auto& vrfRow{response.table_vrf[0]};
+//                 if (vrfRow.table_addrf.size() != 1) { return; }
+//                 const auto& addrfRow{vrfRow.table_addrf[0]};
+//                 if (!addrfRow.table_prefix.has_value() &&
+//                     addrfRow.table_prefix->size() != 1) {
+//                     return;
+//                 }
+//                 const auto& prefixRow{(*addrfRow.table_prefix)[0]};
+//                 const auto& ipprefix{prefixRow.ipprefix};
+//                 if (prefixRow.table_path.size() != 1) { return; }
+//
+//                 const auto& cont{prefixRow.table_path[0].ifname};
+//                 auto        resultIt{
+//                     std::find_if(cont.begin(), cont.end(), [](const auto& ifname) {
+//                         return ifname.has_value() && isValidVlanName(*ifname);
+//                     })};
+//                 if (resultIt == cont.end()) { return; }
+//                 string           vlanIfName{**resultIt};
+//                 uint16_t         vlanId{extractVlanIdFromVlanName(vlanIfName)};
+//                 std::unique_lock mapLock(mutexMap);
+//                 map.insert({addr, vlanId});
+//             });
+//     }
+//     if (handler) { handler(map); }
+// }
+
+void NXOSManagementClient::asyncLookupAddressInternal(
+    const string&                       lookupAddrStr,
+    const string&                       lookupAddrType,
+    const AddressLookupHandlerInternal& responseHandler) {
     m_httpClient->sendRequest(
         m_params.connInfo.url, EndpointName, {},
         JsonRpcUtils::createRequestFromCommands(
@@ -203,6 +261,9 @@ void NXOSManagementClient::asyncLookupAddress(
             NXOSHttpClient::StatusCode statusCode, JsonRpcExceptionPtr jsonRpcException) {
             RouteLookupResponse routeLookup;
             try {
+                if (!response || (response && response->empty())) {
+                    isc_throw(isc::Unexpected, "received empty response");
+                }
                 // because we request only 1 command,
                 // so it's safe to just access first item of response
                 const auto& routeLookupRaw{response->front().result["body"]};
@@ -230,28 +291,79 @@ void NXOSManagementClient::asyncLookupAddress(
         });
 }
 
-static Lease6Ptr findIA_NALeaseByDUID_IAID(const isc::dhcp::DuidPtr& duid,
-                                           uint32_t                  iaid) {
-    // TODO: check for SubnetID in leases and consequences of ignoring it
-    auto&     leaseMgr{LeaseMgrFactory::instance()};
-    Lease6Ptr matchedByIAIDDUIDLeaseIA_NA;
-    if (duid) {
-        const auto& leaseDUID{*duid};
-        auto        leaseCollection{
-            leaseMgr.getLeases6(isc::dhcp::Lease::TYPE_NA, leaseDUID, iaid)};
-
-        // we can have multiple lease entries,
-        // but they are in internal lease_state `STATE_EXPIRED_RECLAIMED`, skip them.
-        // We try to find an active one
-        for (const auto& lease : leaseCollection) {
-            if (lease->stateExpiredReclaimed() || lease->stateDeclined()) { continue; }
-            if (!matchedByIAIDDUIDLeaseIA_NA) {
-                matchedByIAIDDUIDLeaseIA_NA = lease;
-                break;
-            }
+// convert mac-address from format "f6a5.486e.8aad"
+// into "f6:a5:48:6e:8a:ad" that compatible with Kea HWAddr
+static isc::dhcp::HWAddr fromRawCiscoString(const string& rawMac) {
+    std::string mac;
+    {
+        for (size_t i = 0, cnt = 0; i < rawMac.length(); ++i) {
+            if (rawMac[i] == '.') { continue; }
+            if (cnt > 0 && cnt % 2 == 0) { mac += ':'; }
+            mac += rawMac[i];
+            ++cnt;
         }
     }
-    return matchedByIAIDDUIDLeaseIA_NA;
+    return isc::dhcp::HWAddr::fromText(mac);
+}
+
+void NXOSManagementClient::asyncGetHWAddrToInterfaceNameMapping(
+    const HWAddrMappingHandler& handler) {
+    m_httpClient->sendRequest(
+        m_params.connInfo.url, EndpointName, {},
+        JsonRpcUtils::createRequestFromCommands(1, createShowIPv6NeighbourCommand()),
+        [this, handler](
+            JsonRpcResponsePtr response, NXOSHttpClient::ResponseError responseError,
+            NXOSHttpClient::StatusCode statusCode, JsonRpcExceptionPtr jsonRpcException) {
+            NeighborLookupResponse neighborLookup;
+            HWAddrMap              map;
+            bool                   connectionOrEarlyValidationFailed{false};
+            if (responseError == NXOSHttpClient::ResponseError::SUCCESS &&
+                statusCode == 200) {
+                try {
+                    if (jsonRpcException) { throw *jsonRpcException; }
+                    // because we request only 1 command,
+                    // so it's safe to just access first item of response
+                    const auto& neighborLookupRaw{response->front().result["body"]};
+                    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_BASIC,
+                              DHCP6_EXPORTER_NXOS_RESPONSE_NEIGHBOR_LOOKUP_RECEIVED)
+                        .arg(connectionName());
+                    LOG_DEBUG(
+                        DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                        DHCP6_EXPORTER_NXOS_RESPONSE_NEIGHBOR_LOOKUP_RECEIVED_TRACE_DATA)
+                        .arg(connectionName())
+                        .arg(neighborLookupRaw.dump());
+
+                    neighborLookup = neighborLookupRaw.get<NeighborLookupResponse>();
+                } catch (const std::exception& ex) {
+                    LOG_ERROR(DHCP6ExporterLogger,
+                              DHCP6_EXPORTER_NXOS_RESPONSE_PARSE_ERROR)
+                        .arg(connectionName())
+                        .arg(decltype(neighborLookup)::name())
+                        .arg(ex.what());
+                    connectionOrEarlyValidationFailed = true;
+                }
+
+                for (const auto& vrf : neighborLookup.table_vrf) {
+                    for (const auto& afi : vrf.table_afi) {
+                        for (const auto& adj : afi.table_adj) {
+                            for (const auto& object : adj.table_object) {
+                                const auto& rawMac{object.mac};
+                                const auto& ifName{object.intf_out};
+                                if (isValidVlanName(ifName)) {
+                                    map[fromRawCiscoString(rawMac)] = ifName;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                connectionOrEarlyValidationFailed = true;
+            }
+            if (handler) {
+                handler(std::make_shared<HWAddrMap>(std::move(map)),
+                        connectionOrEarlyValidationFailed);
+            }
+        });
 }
 
 void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
@@ -267,7 +379,7 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
         // if we handle IA_NA lease we need to receive mapping
         // from link-addr to vlan id
         string linkAddrType{"RELAY_ADDRESS"};
-        asyncLookupAddress(
+        asyncLookupAddressInternal(
             linkAddrStr, linkAddrType,
             [this, iaNAAddrStr, linkAddrStr,
              dhcpv6TypeStr](const RouteLookupResponse& routeLookup) {
@@ -370,7 +482,7 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
         const auto& iaNAInfoFuzzy{std::get<IA_NAInfoFuzzyRemove>(route.routeInfo)};
         string      iaNAAddrStr{iaNAInfoFuzzy.ia_naAddr.toText() + "/128"};
 
-        asyncLookupAddress(
+        asyncLookupAddressInternal(
             iaNAAddrStr, dhcpv6TypeStr,
             [this, iaNAAddrStr, dhcpv6TypeStr](const RouteLookupResponse& response) {
                 if (response.table_vrf.size() != 1) {
@@ -463,7 +575,7 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
             }
         }
         // fallback to switch lookup
-        asyncLookupAddress(
+        asyncLookupAddressInternal(
             srcIA_PDSubnetStr, dhcpv6TypeStr,
             [this, srcIA_PDSubnetStr,
              dhcpv6TypeStr](const RouteLookupResponse& response) {

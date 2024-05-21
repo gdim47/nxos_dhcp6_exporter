@@ -30,7 +30,7 @@ struct NXOSConnectionConfigParams {
     NXOSConnectionAuth    auth;
     std::optional<string> cert_file;
     std::optional<string> key_file;
-    size_t                heartbeatIntervalSecs{5};
+    size_t                heartbeatIntervalSecs;
 
     static NXOSConnectionConfigParams parseConfig(ConstElementPtr& mgmtConnParams);
 };

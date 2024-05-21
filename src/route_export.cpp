@@ -18,6 +18,9 @@ string RouteExport::toString() const {
             } else if constexpr (std::is_same_v<T, IA_PDInfoFuzzyRemove>) {
                 return "ia_pdPrefix=" + info.ia_pdPrefix.toText() + ", " +
                        "ia_pdLength=" + std::to_string(info.ia_pdLength);
+            } else if constexpr (std::is_same_v<T, IA_NAFast>) {
+                return "srcVlanIfName=" + info.srcVlanIfName +
+                       ", ia_naAddr=" + info.ia_naAddr.toText();
             }
         },
         routeInfo)};
@@ -30,7 +33,8 @@ string RouteExport::toDHCPv6IATypeString() const {
         [](auto&& info) {
             using T = std::decay_t<decltype(info)>;
             if constexpr (std::is_same_v<T, IA_NAInfo> ||
-                          std::is_same_v<T, IA_NAInfoFuzzyRemove>) {
+                          std::is_same_v<T, IA_NAInfoFuzzyRemove> ||
+                          std::is_same_v<T, IA_NAFast>) {
                 return "IA_NA";
             } else if constexpr (std::is_same_v<T, IA_PDInfo> ||
                                  std::is_same_v<T, IA_PDInfoFuzzyRemove>) {

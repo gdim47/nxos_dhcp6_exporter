@@ -7,7 +7,8 @@ using HeartbeatServicePtr = std::shared_ptr<HeartbeatService>;
 
 class HeartbeatService {
   public:
-    using ConnectionRestoredHandler = std::function<void()>;
+    using HandlerFailedCallback = std::function<void()>;
+    using ConnectionRestoredHandler = std::function<void(HandlerFailedCallback)>;
     using ConnectionFailedHandler   = std::function<void()>;
 
   public:

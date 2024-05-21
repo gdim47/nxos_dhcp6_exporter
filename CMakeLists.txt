@@ -56,6 +56,7 @@ find_package(Kea REQUIRED COMPONENTS
     asiolink
     cryptolink
     cc
+    util 
     #exceptions
 )
 

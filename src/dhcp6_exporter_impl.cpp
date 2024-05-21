@@ -339,13 +339,13 @@ void DHCP6ExporterImpl::handleRenewRebindProcess(Pkt6Ptr      query,
         // dhcpv6 change address for client, we need to handle that situation
         if (queryOriginalAddr != leaseAddr) {
             m_service->removeRoute(oldRouteInfo);
-            m_service->exportRoute(newRouteInfo);
         } else if constexpr (IsRebindProcess) {
             // a client sends a REBIND message to any available DHCPv6 Server is
             // sent after a DHCPv6 Client receives no response to a RENEW message.
             // For safety we just re-export new route
             m_service->exportRoute(newRouteInfo);
         }
+            m_service->exportRoute(newRouteInfo);
     } else {
         Option6IAPtr queryIA_PDOption{
             dynamic_pointer_cast<Option6IA>(query->getOption(D6O_IA_PD))};

@@ -80,6 +80,11 @@ bool NXOSHeartbeatService::checkForFailedConnectionOrRPCResponse(
     return false;
 }
 
+void NXOSHeartbeatService::handlerFailedCallback() {
+    std::unique_lock lock(m_heartbeatMutex);
+    m_prevLostConnection = true;
+}
+
 void NXOSHeartbeatService::heartbeatLoop() {
     m_httpClient->sendRequest(
         m_params.connInfo.url, EndpointName, {},
@@ -109,7 +114,7 @@ void NXOSHeartbeatService::heartbeatLoop() {
                         LOG_INFO(DHCP6ExporterLogger,
                                  DHCP6_EXPORTER_NXOS_HEARTBEAT_RESTORED_CONNECTION)
                             .arg(connectionName());
-                        connectionRestoredHandler();
+                        connectionRestoredHandler([this] { handlerFailedCallback(); });
                     }
                 }
                 m_prevUptimeSecs     = 0;
