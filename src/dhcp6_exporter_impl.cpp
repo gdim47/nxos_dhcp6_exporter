@@ -1,4 +1,5 @@
 #include "dhcp6_exporter_impl.hpp"
+#include "lease_utils.hpp"
 #include <dhcpsrv/lease_mgr.h>
 #include <dhcpsrv/lease_mgr_factory.h>
 
@@ -126,60 +127,6 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
     }
 }
 
-using isc::dhcp::LeaseMgrFactory;
-
-static Lease6Ptr findIA_NALeaseByDUID_IAID(const isc::dhcp::DuidPtr& duid,
-                                           uint32_t                  iaid) {
-    // TODO: check for SubnetID in leases and consequences of ignoring it
-    auto&     leaseMgr{LeaseMgrFactory::instance()};
-    Lease6Ptr matchedByIAIDDUIDLeaseIA_NA;
-    if (duid) {
-        const auto& leaseDUID{*duid};
-        auto        leaseCollection{
-            leaseMgr.getLeases6(isc::dhcp::Lease::TYPE_NA, leaseDUID, iaid)};
-
-        // we can have multiple lease entries,
-        // but they are in internal lease_state `STATE_EXPIRED_RECLAIMED`, skip them.
-        // We try to find an active one
-        for (const auto& lease : leaseCollection) {
-            if (lease->stateExpiredReclaimed() || lease->stateDeclined()) { continue; }
-            if (!matchedByIAIDDUIDLeaseIA_NA) {
-                matchedByIAIDDUIDLeaseIA_NA = lease;
-                break;
-            } else {
-                //  LOG_WARN(
-                //      DHCP6ExporterLogger,
-                //      DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_MULTIPLE_LEASES_WARNING)
-                //      .arg(connectionName());
-                //  LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-                //            DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_MULTIPLE_LEASES_DATA)
-                //      .arg(connectionName())
-                //      .arg(route.toString());
-            }
-        }
-    }
-    return matchedByIAIDDUIDLeaseIA_NA;
-}
-
-// TODO: correctly handle different subnets
-static size_t getActiveAndExpiredLeasesSize(isc::dhcp::Lease::Type    type,
-                                            const isc::dhcp::DuidPtr& duidPtr,
-                                            uint32_t                  iaid) {
-    constexpr size_t ExpiredLeasesSize{20};
-
-    size_t result{0};
-    auto&  leaseMgr{LeaseMgrFactory::instance()};
-    if (duidPtr) {
-        const auto& duid{*duidPtr};
-        auto        activeLeaseCollection{leaseMgr.getLeases6(type, duid, iaid)};
-        result += activeLeaseCollection.size();
-        // isc::dhcp::Lease6Collection expiredLeaseCollection;
-        // leaseMgr.getExpiredLeases6(expiredLeaseCollection, ExpiredLeasesSize);
-        // result += expiredLeaseCollection.size();
-    }
-    return result;
-}
-
 void DHCP6ExporterImpl::handleLease6Expire(CalloutHandle& handle) {
     Lease6Ptr lease;
     bool      remove_lease;
@@ -201,8 +148,8 @@ void DHCP6ExporterImpl::handleLease6Expire(CalloutHandle& handle) {
         case isc::dhcp::Lease::TYPE_NA: {
             // find number of active and reclaimed leases.
             // If we are a last lease, remove route
-            size_t activeAndExpiredLeasesSize{getActiveAndExpiredLeasesSize(
-                isc::dhcp::Lease::TYPE_NA, leaseDUID, leaseIAID)};
+            size_t activeAndExpiredLeasesSize{LeaseUtils::getActiveAndExpiredLeasesSize(
+                Lease::TYPE_NA, leaseDUID, leaseIAID)};
 
             LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
                       DHCP6_EXPORTER_LEASE6_EXPIRE_COUNT_INFO)
@@ -223,8 +170,8 @@ void DHCP6ExporterImpl::handleLease6Expire(CalloutHandle& handle) {
         case isc::dhcp::Lease::TYPE_PD: {
             // find number of active and reclaimed leases.
             // If we are a last lease, remove route
-            size_t activeAndExpiredLeasesSize{getActiveAndExpiredLeasesSize(
-                isc::dhcp::Lease::TYPE_PD, leaseDUID, leaseIAID)};
+            size_t activeAndExpiredLeasesSize{LeaseUtils::getActiveAndExpiredLeasesSize(
+                Lease::TYPE_PD, leaseDUID, leaseIAID)};
 
             LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
                       DHCP6_EXPORTER_LEASE6_EXPIRE_COUNT_INFO)
@@ -280,7 +227,8 @@ void DHCP6ExporterImpl::handleLease6Release(CalloutHandle& handle) {
         case isc::dhcp::Lease::TYPE_PD: {
             // for IA_PD removal we need to know IA_NA addr that leased for client.
             // If we can't find lease for IA_NA based on IAID + DUID, nothing we can do
-            Lease6Ptr leaseIA_NA{findIA_NALeaseByDUID_IAID(leaseDUID, leaseIAID)};
+            Lease6Ptr leaseIA_NA{
+                LeaseUtils::findIA_NALeaseByDUID_IAID(leaseDUID, leaseIAID)};
             if (!leaseIA_NA) {
                 LOG_ERROR(DHCP6ExporterLogger,
                           DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_FIND_IA_NA_LEASE_FAILED)
@@ -333,7 +281,8 @@ void DHCP6ExporterImpl::handleLease6Decline(CalloutHandle& handle) {
         case isc::dhcp::Lease::TYPE_PD: {
             // for IA_PD removal we need to know IA_NA addr that leased for client.
             // If we can't find lease for IA_NA based on IAID + DUID, nothing we can do
-            Lease6Ptr leaseIA_NA{findIA_NALeaseByDUID_IAID(leaseDUID, leaseIAID)};
+            Lease6Ptr leaseIA_NA{
+                LeaseUtils::findIA_NALeaseByDUID_IAID(leaseDUID, leaseIAID)};
             if (!leaseIA_NA) {
                 LOG_ERROR(DHCP6ExporterLogger,
                           DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_FIND_IA_NA_LEASE_FAILED)
@@ -411,7 +360,8 @@ void DHCP6ExporterImpl::handleRenewRebindProcess(Pkt6Ptr      query,
         queryOriginalPrefixLength = queryIAPrefixOption->getLength();
 
         // check in lease database that we have IA_NA entry for creating IA_PD route
-        Lease6Ptr leaseIA_NA{findIA_NALeaseByDUID_IAID(clientDUID, clientIAID)};
+        Lease6Ptr leaseIA_NA{
+            LeaseUtils::findIA_NALeaseByDUID_IAID(clientDUID, clientIAID)};
         if (!leaseIA_NA) {
             LOG_ERROR(DHCP6ExporterLogger,
                       DHCP6_EXPORTER_NXOS_ROUTE_REMOVE_FIND_IA_NA_LEASE_FAILED)

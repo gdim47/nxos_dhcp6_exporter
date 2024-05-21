@@ -1,5 +1,6 @@
 #include "nxos_management_client.hpp"
 #include "jsonrpc/utils.hpp"
+#include "lease_utils.hpp"
 #include "log.hpp"
 #include "nxos/nxos_structs.hpp"
 #include "post_request_jsonrpc.hpp"
@@ -440,7 +441,7 @@ void NXOSManagementClient::removeRoutesFromSwitch(const RouteExport& route) {
 
         // try to find IA_NA lease for given DUID + iaid in lease database
         {
-            Lease6Ptr leaseIA_NA{findIA_NALeaseByDUID_IAID(duid, iaid)};
+            Lease6Ptr leaseIA_NA{LeaseUtils::findIA_NALeaseByDUID_IAID(duid, iaid)};
             if (leaseIA_NA) {
                 auto dstIaNAAddrStr{leaseIA_NA->addr_.toText() + "/128"};
                 m_httpClient->sendRequest(

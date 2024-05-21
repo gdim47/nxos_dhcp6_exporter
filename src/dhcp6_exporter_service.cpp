@@ -1,4 +1,5 @@
 #include "dhcp6_exporter_service.hpp"
+#include "lease_utils.hpp"
 #include "management_client.hpp"
 
 DHCP6ExporterService::DHCP6ExporterService(ConstElementPtr mgmtConnType,

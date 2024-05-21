@@ -100,6 +100,7 @@ target_sources(nxos_dhcp6_exporter PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/dhcp6_exporter_service.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/management_client.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/heartbeat_service.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/lease_utils.cpp"
     # management clients
     "${CMAKE_CURRENT_SOURCE_DIR}/src/nxos_management_client.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/nxos_connection_params.cpp"
