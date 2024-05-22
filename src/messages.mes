@@ -27,6 +27,7 @@
 
 % DHCP6_EXPORTER_LEASE6_SELECT lease6_select: query6: %1, subnet6: %2, lease6: %3, fake_allocation: %4
 % DHCP6_EXPORTER_LEASE6_SELECT_FAILED lease6_select failed: reason: %1
+% DHCP6_EXPORTER_LEASE6_SELECT_NO_IA_NA_FAILED lease6_select failed: Can't find IA_NA lease inside lease database: lease_iaid: {%1}, lease_duid: {%2}
 % DHCP6_EXPORTER_LEASE6_SELECT_INSERT lease6_select: insert lease for tid: %1, ia_na option: {%2}, ia_pd option: {%3}
 % DHCP6_EXPORTER_LEASE6_SELECT_ALLOCATION_INFO lease6_select allocation info: route_export: %1
 
@@ -86,6 +87,7 @@
 % DHCP6_EXPORTER_NXOS_ROUTE_CHECK_HWADDR Checking VLAN id for HWAddr from switch{%1}: hwaddr: {%2}
 
 % DHCP6_EXPORTER_LOG_RESPONSE Switch response raw: %1
+% DHCP6_EXPORTER_NXOS_ROUTE_APPLY_UNKNOWN_ERROR Unknown error while applying route on switch{%1}: reason: {%2}
 
 % DHCP6_EXPORTER_NXOS_HEARTBEAT_INVALID_STATUS_CODE Failed to receive response from switch{%1}: response_error: {%2}, response_status: {%3} 
 % DHCP6_EXPORTER_NXOS_HEARTBEAT_RESPONSE_FAILED Failed to read response from switch{%1}: reason: {%2}

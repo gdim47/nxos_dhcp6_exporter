@@ -13,9 +13,6 @@ class ManagementClient {
         size_t operator()(const isc::dhcp::HWAddr& hwAddr) const;
     };
 
-    using VLANAddrToVLANIDMap = std::unordered_map<IOAddress, uint16_t, IOAddress::Hash>;
-    using VLANMappingHandler  = std::function<void(VLANAddrToVLANIDMap)>;
-
     using HWAddrMap =
         std::unordered_map<isc::dhcp::HWAddr, string, ManagementClient::HWAddrHashHelper>;
     using HWAddrMapPtr         = std::shared_ptr<HWAddrMap>;

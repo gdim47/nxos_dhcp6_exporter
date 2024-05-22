@@ -74,11 +74,6 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
                 queryIA_NAOption = dynamic_pointer_cast<Option6IA>(queryIA_NAOptionRaw);
             }
         }
-        Option6IAAddrPtr queryIAAddrOption;
-        if (queryIA_NAOption) {
-            auto queryIAAddrRaw{queryIA_NAOption->getOption(D6O_IAADDR)};
-            queryIAAddrOption = dynamic_pointer_cast<Option6IAAddr>(queryIAAddrRaw);
-        }
 
         auto     leaseAddr{lease->addr_};
         auto     leasePrefixLength{lease->prefixlen_};
@@ -86,30 +81,29 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
         uint32_t leaseIAID{lease->iaid_};
         auto     leaseDUID{lease->duid_};
 
-        if (queryIA_NAOption && queryIA_PDOption) {
-            // for correct route assignment we need IA_NA and IA_PD.
+        LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_LEASE6_SELECT_INSERT)
+            .arg(transactionId)
+            .arg(queryIA_NAOption ? queryIA_NAOption->toString() : "(null)")
+            .arg(queryIA_PDOption ? queryIA_PDOption->toString() : "(null)");
+        // extract info about options from lease
+        switch (leaseType) {
+            case isc::dhcp::Lease::TYPE_NA: {
+                RouteExport routeInfo{
+                    transactionId, leaseIAID, leaseDUID,
+                    IA_NAInfo{std::move(relayAddr), std::move(leaseAddr)}};
 
-            LOG_INFO(DHCP6ExporterLogger, DHCP6_EXPORTER_LEASE6_SELECT_INSERT)
-                .arg(transactionId)
-                .arg(queryIA_NAOption->toString())
-                .arg(queryIA_PDOption->toString());
-            // extract info about options from lease
-            switch (leaseType) {
-                case isc::dhcp::Lease::TYPE_NA: {
-                    RouteExport routeInfo{
-                        transactionId, leaseIAID, leaseDUID,
-                        IA_NAInfo{std::move(relayAddr), std::move(leaseAddr)}};
-
-                    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-                              DHCP6_EXPORTER_LEASE6_SELECT_ALLOCATION_INFO)
-                        .arg(routeInfo.toString());
-                    // send router export to switch
-                    m_service->exportRoute(routeInfo);
-                } break;
-                case isc::dhcp::Lease::TYPE_PD: {
-                    // TODO: maybe remove dependency on user input for IA_PDInfo route
+                LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                          DHCP6_EXPORTER_LEASE6_SELECT_ALLOCATION_INFO)
+                    .arg(routeInfo.toString());
+                // send router export to switch
+                m_service->exportRoute(routeInfo);
+            } break;
+            case isc::dhcp::Lease::TYPE_PD: {
+                auto IA_NALease{
+                    LeaseUtils::findIA_NALeaseByDUID_IAID(leaseDUID, leaseIAID)};
+                if (IA_NALease) {
                     RouteExport routeInfo{transactionId, leaseIAID, leaseDUID,
-                                          IA_PDInfo{queryIAAddrOption->getAddress(),
+                                          IA_PDInfo{IA_NALease->addr_,
                                                     std::move(leaseAddr),
                                                     leasePrefixLength}};
 
@@ -119,12 +113,20 @@ void DHCP6ExporterImpl::handleLease6Select(CalloutHandle& handle) {
 
                     // send route export to the switch
                     m_service->exportRoute(routeInfo);
-                } break;
-                case isc::dhcp::Lease::TYPE_TA:
-                case isc::dhcp::Lease::TYPE_V4: break;
-            }
+                } else {
+                    LOG_ERROR(DHCP6ExporterLogger,
+                              DHCP6_EXPORTER_LEASE6_SELECT_NO_IA_NA_FAILED)
+                        .arg(leaseIAID)
+                        .arg(leaseDUID);
+                    handle.setStatus(CalloutHandle::NEXT_STEP_SKIP);
+                    return;
+                }
+            } break;
+            case isc::dhcp::Lease::TYPE_TA:
+            case isc::dhcp::Lease::TYPE_V4: break;
         }
     }
+    //}
 }
 
 void DHCP6ExporterImpl::handleLease6Expire(CalloutHandle& handle) {
@@ -343,9 +345,9 @@ void DHCP6ExporterImpl::handleRenewRebindProcess(Pkt6Ptr      query,
             // a client sends a REBIND message to any available DHCPv6 Server is
             // sent after a DHCPv6 Client receives no response to a RENEW message.
             // For safety we just re-export new route
-            m_service->exportRoute(newRouteInfo);
+            // m_service->exportRoute(newRouteInfo);
         }
-            m_service->exportRoute(newRouteInfo);
+        m_service->exportRoute(newRouteInfo);
     } else {
         Option6IAPtr queryIA_PDOption{
             dynamic_pointer_cast<Option6IA>(query->getOption(D6O_IA_PD))};

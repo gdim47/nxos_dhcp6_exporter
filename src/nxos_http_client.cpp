@@ -223,7 +223,7 @@ void NXOSHttpClientImpl::sendRequest(
                     static_cast<httplib::StatusCode>(response->status));
                 string responseBody = response->body;
                 try {
-                    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                    LOG_DEBUG(DHCP6ExporterRequestLogger, DBGLVL_TRACE_DETAIL,
                               DHCP6_EXPORTER_LOG_RESPONSE)
                         .arg(responseBody);
 

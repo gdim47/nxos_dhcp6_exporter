@@ -72,128 +72,139 @@ static string createShowIPv6NeighbourCommand() { return "show ipv6 neighbor"; }
 
 void NXOSManagementClient::sendRoutesToSwitch(const RouteExport& route) {
     auto dhcpv6TypeStr{route.toDHCPv6IATypeString()};
-    if (std::holds_alternative<IA_NAInfo>(route.routeInfo)) {
-        const auto& iaNAInfo{std::get<IA_NAInfo>(route.routeInfo)};
-        string      linkAddrStr{iaNAInfo.srcVlanAddr.toText() + "/128"};
-        string      iaNAAddrStr{iaNAInfo.ia_naAddr.toText() + "/128"};
+    try {
+        if (std::holds_alternative<IA_NAInfo>(route.routeInfo)) {
+            const auto& iaNAInfo{std::get<IA_NAInfo>(route.routeInfo)};
+            string      linkAddrStr{iaNAInfo.srcVlanAddr.toText() + "/128"};
+            string      iaNAAddrStr{iaNAInfo.ia_naAddr.toText() + "/128"};
 
-        // get mapping vlan addr -> vlan id
-        // if we handle IA_NA lease we need to receive mapping
-        // from link-addr to vlan id
+            // get mapping vlan addr -> vlan id
+            // if we handle IA_NA lease we need to receive mapping
+            // from link-addr to vlan id
 
-        string linkAddrType{"RELAY_ADDRESS"};
-        asyncLookupAddressInternal(
-            linkAddrStr, linkAddrType,
-            [this, iaNAAddrStr, linkAddrStr,
-             dhcpv6TypeStr](const RouteLookupResponse& routeLookup) {
-                string vlanIfName;
-                try {
-                    // we know that link-address maps to one vlan.
-                    // Otherwise, this is a error condition
-                    if (routeLookup.table_vrf.size() != 1) {
-                        isc_throw(
-                            isc::BadValue,
-                            "field \"TABLE_vrf\" of response does not contain exactly 1 item");
-                    }
-                    const auto& vrfRow{routeLookup.table_vrf[0]};
-                    if (vrfRow.table_addrf.size() != 1) {
-                        isc_throw(
-                            isc::BadValue,
-                            "field \"TABLE_addrf\" of response does not contain exactly 1 item");
-                    }
-                    const auto& addrfRow{vrfRow.table_addrf[0]};
-                    if (!addrfRow.table_prefix.has_value() &&
-                        addrfRow.table_prefix->size() != 1) {
-                        isc_throw(
-                            isc::BadValue,
-                            "field \"TABLE_prefix\" does not contain exactly 1 item");
-                    }
-                    const auto& prefixRow{(*addrfRow.table_prefix)[0]};
-                    const auto& ipprefix{prefixRow.ipprefix};
-                    if (prefixRow.table_path.size() != 1) {
-                        isc_throw(isc::BadValue,
-                                  "field \"TABLE_path\" does not contain exactly 1 item");
-                    }
+            string linkAddrType{"RELAY_ADDRESS"};
+            asyncLookupAddressInternal(
+                linkAddrStr, linkAddrType,
+                [this, iaNAAddrStr, linkAddrStr,
+                 dhcpv6TypeStr](const RouteLookupResponse& routeLookup) {
+                    string vlanIfName;
+                    try {
+                        // we know that link-address maps to one vlan.
+                        // Otherwise, this is a error condition
+                        if (routeLookup.table_vrf.size() != 1) {
+                            isc_throw(
+                                isc::BadValue,
+                                "field \"TABLE_vrf\" of response does not contain exactly 1 item");
+                        }
+                        const auto& vrfRow{routeLookup.table_vrf[0]};
+                        if (vrfRow.table_addrf.size() != 1) {
+                            isc_throw(
+                                isc::BadValue,
+                                "field \"TABLE_addrf\" of response does not contain exactly 1 item");
+                        }
+                        const auto& addrfRow{vrfRow.table_addrf[0]};
+                        if (!addrfRow.table_prefix.has_value() &&
+                            addrfRow.table_prefix->size() != 1) {
+                            isc_throw(
+                                isc::BadValue,
+                                "field \"TABLE_prefix\" does not contain exactly 1 item");
+                        }
+                        const auto& prefixRow{(*addrfRow.table_prefix)[0]};
+                        const auto& ipprefix{prefixRow.ipprefix};
+                        if (prefixRow.table_path.size() != 1) {
+                            isc_throw(
+                                isc::BadValue,
+                                "field \"TABLE_path\" does not contain exactly 1 item");
+                        }
 
-                    const auto& ifnames{prefixRow.table_path[0].ifname};
-                    auto        resultIt{std::find_if(
-                        ifnames.begin(), ifnames.end(),
-                        [](const auto& ifname) { return ifname.has_value(); })};
-                    if (resultIt == ifnames.end()) {
-                        isc_throw(isc::BadValue, "vlan interface id is empty");
+                        const auto& ifnames{prefixRow.table_path[0].ifname};
+                        auto        resultIt{std::find_if(
+                            ifnames.begin(), ifnames.end(),
+                            [](const auto& ifname) { return ifname.has_value(); })};
+                        if (resultIt == ifnames.end()) {
+                            isc_throw(isc::BadValue, "vlan interface id is empty");
+                        }
+                        vlanIfName = **resultIt;
+                    } catch (const isc::BadValue& ex) {
+                        LOG_ERROR(DHCP6ExporterLogger,
+                                  DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_ERROR)
+                            .arg(connectionName())
+                            .arg(ex.what());
+                        return;
+                    } catch (const std::exception& ex) {
+                        LOG_ERROR(DHCP6ExporterLogger,
+                                  DHCP6_EXPORTER_NXOS_RESPONSE_PARSE_ERROR)
+                            .arg(connectionName())
+                            .arg(RouteLookupResponse::name())
+                            .arg(ex.what());
+                        return;
                     }
-                    vlanIfName = **resultIt;
-                } catch (const isc::BadValue& ex) {
-                    LOG_ERROR(DHCP6ExporterLogger,
-                              DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_ERROR)
+                    LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
+                              DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_TRACE_DATA)
                         .arg(connectionName())
-                        .arg(ex.what());
-                    return;
-                } catch (const std::exception& ex) {
-                    LOG_ERROR(DHCP6ExporterLogger,
-                              DHCP6_EXPORTER_NXOS_RESPONSE_PARSE_ERROR)
-                        .arg(connectionName())
-                        .arg(RouteLookupResponse::name())
-                        .arg(ex.what());
-                    return;
-                }
-                LOG_DEBUG(DHCP6ExporterLogger, DBGLVL_TRACE_DETAIL,
-                          DHCP6_EXPORTER_NXOS_RESPONSE_VLAN_ADDR_MAPPING_TRACE_DATA)
-                    .arg(connectionName())
-                    .arg(linkAddrStr)
-                    .arg(vlanIfName);
+                        .arg(linkAddrStr)
+                        .arg(vlanIfName);
 
-                // after we receive vlanIfName, send actual route
-                m_httpClient->sendRequest(
-                    m_params.connInfo.url, EndpointName,
-                    {},    // TODO: correct handle tls
-                    JsonRpcUtils::createRequestFromCommands(
-                        1, createApplyRouteIpv6Command(iaNAAddrStr, vlanIfName)),
-                    [this, iaNAAddrStr, vlanIfName,
-                     dhcpv6TypeStr](JsonRpcResponsePtr            response,
-                                    NXOSHttpClient::ResponseError responseError,
-                                    NXOSHttpClient::StatusCode    statusCode,
-                                    JsonRpcExceptionPtr           jsonRpcException) {
-                        handleRouteApply(dhcpv6TypeStr, response, iaNAAddrStr, vlanIfName,
-                                         responseError, statusCode, jsonRpcException);
-                    });
-            });
-    } else if (std::holds_alternative<IA_NAFast>(route.routeInfo)) {
-        const auto& iaNAInfo{std::get<IA_NAFast>(route.routeInfo)};
-        string      vlanIfName{iaNAInfo.srcVlanIfName};
-        string      iaNAAddrStr{iaNAInfo.ia_naAddr.toText() + "/128"};
-        // we have all required info, just send route
-        m_httpClient->sendRequest(
-            m_params.connInfo.url, EndpointName, {},    // TODO: correct handle tls
-            JsonRpcUtils::createRequestFromCommands(
-                1, createApplyRouteIpv6Command(iaNAAddrStr, vlanIfName)),
-            [this, iaNAAddrStr, vlanIfName, dhcpv6TypeStr](
-                JsonRpcResponsePtr response, NXOSHttpClient::ResponseError responseError,
-                NXOSHttpClient::StatusCode statusCode,
-                JsonRpcExceptionPtr        jsonRpcException) {
-                handleRouteApply(dhcpv6TypeStr, response, iaNAAddrStr, vlanIfName,
-                                 responseError, statusCode, jsonRpcException);
-            });
-    } else if (std::holds_alternative<IA_PDInfo>(route.routeInfo)) {
-        const auto& iaPDInfo{std::get<IA_PDInfo>(route.routeInfo)};
-        string      srcIA_PDSubnetStr{iaPDInfo.ia_pdPrefix.toText() + "/" +
-                                 std::to_string(iaPDInfo.ia_pdLength)};
-        string      dstIA_NAAddrStr{iaPDInfo.dstIa_naAddr.toText()};
+                    // after we receive vlanIfName, send actual route
+                    m_httpClient->sendRequest(
+                        m_params.connInfo.url, EndpointName,
+                        {},    // TODO: correct handle tls
+                        JsonRpcUtils::createRequestFromCommands(
+                            1, createApplyRouteIpv6Command(iaNAAddrStr, vlanIfName)),
+                        [this, iaNAAddrStr, vlanIfName,
+                         dhcpv6TypeStr](JsonRpcResponsePtr            response,
+                                        NXOSHttpClient::ResponseError responseError,
+                                        NXOSHttpClient::StatusCode    statusCode,
+                                        JsonRpcExceptionPtr           jsonRpcException) {
+                            handleRouteApply(dhcpv6TypeStr, response, iaNAAddrStr,
+                                             vlanIfName, responseError, statusCode,
+                                             jsonRpcException);
+                        });
+                });
+        } else if (std::holds_alternative<IA_NAFast>(route.routeInfo)) {
+            const auto& iaNAInfo{std::get<IA_NAFast>(route.routeInfo)};
+            string      vlanIfName{iaNAInfo.srcVlanIfName};
+            string      iaNAAddrStr{iaNAInfo.ia_naAddr.toText() + "/128"};
+            // we have all required info, just send route
+            m_httpClient->sendRequest(
+                m_params.connInfo.url, EndpointName, {},    // TODO: correct handle tls
+                JsonRpcUtils::createRequestFromCommands(
+                    1, createApplyRouteIpv6Command(iaNAAddrStr, vlanIfName)),
+                [this, iaNAAddrStr, vlanIfName,
+                 dhcpv6TypeStr](JsonRpcResponsePtr            response,
+                                NXOSHttpClient::ResponseError responseError,
+                                NXOSHttpClient::StatusCode    statusCode,
+                                JsonRpcExceptionPtr           jsonRpcException) {
+                    handleRouteApply(dhcpv6TypeStr, response, iaNAAddrStr, vlanIfName,
+                                     responseError, statusCode, jsonRpcException);
+                });
+        } else if (std::holds_alternative<IA_PDInfo>(route.routeInfo)) {
+            const auto& iaPDInfo{std::get<IA_PDInfo>(route.routeInfo)};
+            string      srcIA_PDSubnetStr{iaPDInfo.ia_pdPrefix.toText() + "/" +
+                                     std::to_string(iaPDInfo.ia_pdLength)};
+            string      dstIA_NAAddrStr{iaPDInfo.dstIa_naAddr.toText()};
 
-        m_httpClient->sendRequest(
-            m_params.connInfo.url, EndpointName, {},
-            JsonRpcUtils::createRequestFromCommands(
-                1, createApplyRouteIpv6Command(srcIA_PDSubnetStr, dstIA_NAAddrStr)),
-            [this, srcIA_PDSubnetStr, dstIA_NAAddrStr, dhcpv6TypeStr](
-                JsonRpcResponsePtr response, NXOSHttpClient::ResponseError responseError,
-                NXOSHttpClient::StatusCode statusCode,
-                JsonRpcExceptionPtr        jsonRpcException) {
-                handleRouteApply(dhcpv6TypeStr, response, srcIA_PDSubnetStr,
-                                 dstIA_NAAddrStr, responseError, statusCode,
-                                 jsonRpcException);
-            });
-    } else {
-        isc_throw(isc::NotImplemented, "not implemented IA route info");
+            m_httpClient->sendRequest(
+                m_params.connInfo.url, EndpointName, {},
+                JsonRpcUtils::createRequestFromCommands(
+                    1, createApplyRouteIpv6Command(srcIA_PDSubnetStr, dstIA_NAAddrStr)),
+                [this, srcIA_PDSubnetStr, dstIA_NAAddrStr,
+                 dhcpv6TypeStr](JsonRpcResponsePtr            response,
+                                NXOSHttpClient::ResponseError responseError,
+                                NXOSHttpClient::StatusCode    statusCode,
+                                JsonRpcExceptionPtr           jsonRpcException) {
+                    handleRouteApply(dhcpv6TypeStr, response, srcIA_PDSubnetStr,
+                                     dstIA_NAAddrStr, responseError, statusCode,
+                                     jsonRpcException);
+                });
+        } else {
+            isc_throw(isc::NotImplemented, "not implemented IA route info");
+        }
+
+    } catch (const std::exception& ex) {
+        LOG_ERROR(DHCP6ExporterLogger, DHCP6_EXPORTER_NXOS_ROUTE_APPLY_UNKNOWN_ERROR)
+            .arg(connectionName())
+            .arg(ex.what());
     }
 }
 
@@ -208,45 +219,6 @@ static string createRemoveNDCacheEntryIpv6Command(const string& vlanIfName) {
     const string ForceDeleteSuffix{" force-delete"};
     return Ipv6RemoveNDCacheEntryPrefix + vlanIfName + ForceDeleteSuffix;
 }
-
-// void NXOSManagementClient::asyncGetVLANMappings(const std::vector<IOAddress>&
-// vlanAddrs,
-//                                                 const VLANMappingHandler&     handler)
-//                                                 {
-//     VLANAddrToVLANIDMap map;
-//     std::mutex          mutexMap;
-//     for (auto addr : vlanAddrs) {
-//         if (map.count(addr) == 1) { continue; }
-//         asyncLookupAddressInternal(
-//             addr.toText(), "RELAY_ADDRESS",
-//             [&mutexMap, &map, addr](const NXOSResponse::RouteLookupResponse& response)
-//             {
-//                 if (response.table_vrf.size() != 1) { return; }
-//                 const auto& vrfRow{response.table_vrf[0]};
-//                 if (vrfRow.table_addrf.size() != 1) { return; }
-//                 const auto& addrfRow{vrfRow.table_addrf[0]};
-//                 if (!addrfRow.table_prefix.has_value() &&
-//                     addrfRow.table_prefix->size() != 1) {
-//                     return;
-//                 }
-//                 const auto& prefixRow{(*addrfRow.table_prefix)[0]};
-//                 const auto& ipprefix{prefixRow.ipprefix};
-//                 if (prefixRow.table_path.size() != 1) { return; }
-//
-//                 const auto& cont{prefixRow.table_path[0].ifname};
-//                 auto        resultIt{
-//                     std::find_if(cont.begin(), cont.end(), [](const auto& ifname) {
-//                         return ifname.has_value() && isValidVlanName(*ifname);
-//                     })};
-//                 if (resultIt == cont.end()) { return; }
-//                 string           vlanIfName{**resultIt};
-//                 uint16_t         vlanId{extractVlanIdFromVlanName(vlanIfName)};
-//                 std::unique_lock mapLock(mutexMap);
-//                 map.insert({addr, vlanId});
-//             });
-//     }
-//     if (handler) { handler(map); }
-// }
 
 void NXOSManagementClient::asyncLookupAddressInternal(
     const string&                       lookupAddrStr,

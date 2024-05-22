@@ -9,3 +9,5 @@ using isc::log::DBGLVL_TRACE_BASIC_DATA;
 using isc::log::DBGLVL_TRACE_DETAIL;
 
 extern isc::log::Logger DHCP6ExporterLogger;
+extern isc::log::Logger DHCP6ExporterHeartbeatLogger;
+extern isc::log::Logger DHCP6ExporterRequestLogger;
